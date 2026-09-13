@@ -103,3 +103,14 @@ export const AUDIT_ACTIONS = {
   USER_DELETED: 'user.deleted',
   SETTINGS_CHANGED: 'settings.changed',
 } as const;
+
+/** Public Storage bucket holding optional Question Bank images. */
+export const QUESTION_IMAGES_BUCKET = 'question-images';
+
+/** Question images are shown inline on the candidate exam screen, so keep
+ * them small — 5MB comfortably covers a photographed/scanned diagram. */
+export const MAX_QUESTION_IMAGE_BYTES = 5 * 1024 * 1024;
+
+export const ALLOWED_QUESTION_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'] as const;
+
+export const QUESTION_IMAGE_ACCEPT = '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp';

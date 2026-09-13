@@ -1,7 +1,10 @@
 'use client';
 
+import * as React from 'react';
+import { ZoomIn } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { QUESTION_TYPE_LABELS } from '@/lib/constants';
+import { ImageLightbox } from '@/components/exam/image-lightbox';
 import type { CandidateQuestionView } from '@/types/database';
 
 export function QuestionCard({
@@ -14,6 +17,7 @@ export function QuestionCard({
   onToggle: (optionId: string) => void;
 }) {
   const isMultiple = question.question_type === 'multiple';
+  const [lightboxOpen, setLightboxOpen] = React.useState(false);
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
@@ -23,6 +27,28 @@ export function QuestionCard({
         </span>
         <span className="text-xs text-slate-400">{question.marks} mark{question.marks === 1 ? '' : 's'}</span>
       </div>
+
+      {question.image_url && (
+        <div className="mb-4">
+          <button
+            type="button"
+            onClick={() => setLightboxOpen(true)}
+            className="group relative block w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-navy-700 focus-visible:ring-offset-1"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={question.image_url}
+              alt="Reference image for this question"
+              className="mx-auto max-h-72 w-auto max-w-full object-contain sm:max-h-96"
+            />
+            <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-slate-900/70 px-2.5 py-1 text-[11px] font-medium text-white opacity-90 transition-opacity group-hover:opacity-100">
+              <ZoomIn className="h-3 w-3" aria-hidden="true" />
+              Tap to enlarge
+            </span>
+          </button>
+          <ImageLightbox open={lightboxOpen} onOpenChange={setLightboxOpen} src={question.image_url} />
+        </div>
+      )}
 
       {question.scenario_text && (
         <div className="mb-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">

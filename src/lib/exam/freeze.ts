@@ -12,6 +12,7 @@ export interface FrozenQuestionPayload {
   marks_snapshot: number;
   option_order_snapshot: CandidateOption[];
   correct_option_ids: string[];
+  image_url_snapshot: string | null;
 }
 
 /** Fisher–Yates shuffle using a CSPRNG rather than Math.random, so question
@@ -51,7 +52,7 @@ export async function selectAndFreezeQuestions({
 
   let query = supabase
     .from('questions')
-    .select('id, question_text, scenario_text, question_type, marks, question_options(id, option_key, option_text, is_correct)')
+    .select('id, question_text, scenario_text, question_type, marks, image_url, question_options(id, option_key, option_text, is_correct)')
     .eq('competency_id', competencyId)
     .eq('active', true);
 
@@ -101,6 +102,7 @@ export async function selectAndFreezeQuestions({
       marks_snapshot: q.marks,
       option_order_snapshot: optionOrderSnapshot,
       correct_option_ids: correctOptionIds,
+      image_url_snapshot: q.image_url ?? null,
     };
   });
 }

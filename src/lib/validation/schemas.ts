@@ -30,6 +30,10 @@ export const questionSchema = z
     explanation_admin_only: z.string().trim().max(4000).optional().or(z.literal('')),
     active: z.boolean().default(true),
     options: z.array(questionOptionSchema).min(2, 'At least two options are required'),
+    // Optional image (JPG/JPEG/PNG/WebP), uploaded separately via
+    // uploadQuestionImage() — this field only ever holds the resulting
+    // public Storage URL, never raw file data.
+    image_url: z.string().trim().url('Invalid image URL').optional().nullable().or(z.literal('')),
   })
   .superRefine((data, ctx) => {
     const correctCount = data.options.filter((o) => o.is_correct).length;

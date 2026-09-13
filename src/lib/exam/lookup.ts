@@ -71,7 +71,9 @@ export async function getCandidateQuestionViews(assessmentId: string): Promise<C
 
   const { data: questions, error } = await admin
     .from('assessment_questions')
-    .select('id, display_order, question_text_snapshot, scenario_text_snapshot, question_type_snapshot, marks_snapshot, option_order_snapshot')
+    .select(
+      'id, display_order, question_text_snapshot, scenario_text_snapshot, question_type_snapshot, marks_snapshot, option_order_snapshot, image_url_snapshot'
+    )
     .eq('assessment_id', assessmentId)
     .order('display_order', { ascending: true });
 
@@ -94,5 +96,6 @@ export async function getCandidateQuestionViews(assessmentId: string): Promise<C
     marks: q.marks_snapshot,
     options: q.option_order_snapshot as CandidateQuestionView['options'],
     selected_option_ids: answerMap.get(q.id) ?? [],
+    image_url: q.image_url_snapshot,
   }));
 }

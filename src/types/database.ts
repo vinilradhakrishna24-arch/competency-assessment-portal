@@ -83,6 +83,9 @@ export interface Question {
   difficulty: Difficulty | null;
   explanation_admin_only: string | null;
   active: boolean;
+  /** Optional image (e.g. a safety diagram) shown above the question text
+   * during the exam. Public Storage URL, or null for text-only questions. */
+  image_url: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -157,6 +160,7 @@ export interface AssessmentQuestion {
   marks_snapshot: number;
   option_order_snapshot: CandidateOption[];
   correct_option_ids: string[]; // server-only — never sent to the candidate browser
+  image_url_snapshot: string | null;
 }
 
 export interface Answer {
@@ -217,4 +221,5 @@ export interface CandidateQuestionView {
   marks: number;
   options: CandidateOption[];
   selected_option_ids: string[];
+  image_url: string | null;
 }

@@ -2,11 +2,12 @@
 
 import * as React from 'react';
 import { toast } from 'sonner';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, ImagePlus, X, Loader2 } from 'lucide-react';
 import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { FormField, Input, Textarea, Select } from '@/components/ui/input';
-import { createQuestion, updateQuestion } from '@/lib/actions/questions';
+import { createQuestion, updateQuestion, uploadQuestionImage } from '@/lib/actions/questions';
+import { MAX_QUESTION_IMAGE_BYTES, ALLOWED_QUESTION_IMAGE_TYPES, QUESTION_IMAGE_ACCEPT } from '@/lib/constants';
 import type { QuestionInput } from '@/lib/validation/schemas';
 
 export interface QuestionFormOption {
@@ -27,6 +28,7 @@ export interface EditableQuestion {
   explanation_admin_only: string | null;
   active: boolean;
   options: QuestionFormOption[];
+  image_url: string | null;
 }
 
 const KEYS = ['A', 'B', 'C', 'D', 'E', 'F'];
@@ -46,6 +48,7 @@ function emptyForm(competencyId: string): QuestionInput {
       { option_key: 'A', option_text: '', is_correct: true },
       { option_key: 'B', option_text: '', is_correct: false },
     ],
+    image_url: null,
   };
 }
 
@@ -67,6 +70,8 @@ export function QuestionFormDialog({
   const [form, setForm] = React.useState<QuestionInput>(() => emptyForm(competencies[0]?.id ?? ''));
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [saving, setSaving] = React.useState(false);
+  const [uploadingImage, setUploadingImage] = React.useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
     if (!open) return;
@@ -82,11 +87,13 @@ export function QuestionFormDialog({
         explanation_admin_only: question.explanation_admin_only ?? '',
         active: question.active,
         options: question.options,
+        image_url: question.image_url ?? null,
       });
     } else {
       setForm(emptyForm(competencies[0]?.id ?? ''));
     }
     setErrors({});
+    setUploadingImage(false);
   }, [open, question, competencies]);
 
   const availableSets = questionSets.filter((s) => s.competency_id === form.competency_id);
@@ -132,6 +139,37 @@ export function QuestionFormDialog({
 
   function removeOption(index: number) {
     setForm((prev) => ({ ...prev, options: prev.options.filter((_, i) => i !== index) }));
+  }
+
+  async function handleImageSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file later (e.g. after removing it)
+    if (!file) return;
+
+    if (!ALLOWED_QUESTION_IMAGE_TYPES.includes(file.type as (typeof ALLOWED_QUESTION_IMAGE_TYPES)[number])) {
+      toast.error('Only JPG, JPEG, PNG and WebP images are supported.');
+      return;
+    }
+    if (file.size > MAX_QUESTION_IMAGE_BYTES) {
+      toast.error(`Image is too large — the limit is ${Math.floor(MAX_QUESTION_IMAGE_BYTES / (1024 * 1024))}MB.`);
+      return;
+    }
+
+    setUploadingImage(true);
+    const fd = new FormData();
+    fd.set('file', file);
+    const result = await uploadQuestionImage(fd);
+    setUploadingImage(false);
+
+    if (!result.ok || !result.url) {
+      toast.error(result.error ?? 'Failed to upload image.');
+      return;
+    }
+    setField('image_url', result.url);
+  }
+
+  function removeImage() {
+    setField('image_url', null);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -236,6 +274,55 @@ export function QuestionFormDialog({
           <Textarea id="question_text" value={form.question_text} onChange={(e) => setField('question_text', e.target.value)} rows={2} />
         </FormField>
 
+        <FormField
+          label="Question Image (optional)"
+          htmlFor="question_image"
+          hint="JPG, JPEG, PNG or WebP, up to 5MB. Shown to the candidate above the question text."
+        >
+          <input
+            ref={fileInputRef}
+            id="question_image"
+            type="file"
+            accept={QUESTION_IMAGE_ACCEPT}
+            className="hidden"
+            onChange={handleImageSelected}
+          />
+          {form.image_url ? (
+            <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={form.image_url}
+                alt="Question preview"
+                className="h-24 w-24 shrink-0 rounded-lg border border-slate-200 bg-white object-contain"
+              />
+              <div className="flex flex-1 flex-col gap-2">
+                <p className="text-xs text-slate-500">Image uploaded. This will be saved with the question.</p>
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploadingImage}>
+                    {uploadingImage ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImagePlus className="h-3.5 w-3.5" />}
+                    Replace
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={removeImage} disabled={uploadingImage}>
+                    <X className="h-3.5 w-3.5 text-slate-400" /> Remove
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={uploadingImage}>
+              {uploadingImage ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading…
+                </>
+              ) : (
+                <>
+                  <ImagePlus className="h-3.5 w-3.5" /> Upload Image
+                </>
+              )}
+            </Button>
+          )}
+        </FormField>
+
         <div>
           <div className="mb-2 flex items-center justify-between">
             <p className="text-sm font-medium text-slate-700">Answer Options</p>
@@ -291,7 +378,7 @@ export function QuestionFormDialog({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>
-          <Button type="submit" disabled={saving}>
+          <Button type="submit" disabled={saving || uploadingImage}>
             {saving ? 'Saving…' : question ? 'Save Changes' : 'Create Question'}
           </Button>
         </div>

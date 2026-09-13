@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { Plus, Pencil, EyeOff, Eye, Trash2, Upload, ListTree, BookOpenCheck } from 'lucide-react';
+import { Plus, Pencil, EyeOff, Eye, Trash2, Upload, ListTree, BookOpenCheck, ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/input';
 import { Table, Thead, Tbody, Tr, Th, Td } from '@/components/ui/table';
@@ -28,6 +28,7 @@ interface QuestionRow {
   difficulty: 'easy' | 'medium' | 'hard' | null;
   explanation_admin_only: string | null;
   active: boolean;
+  image_url: string | null;
   competencies: { code: string; competency_name: string } | null;
   question_sets: { set_name: string } | null;
   question_options: { id: string; option_key: string; option_text: string; is_correct: boolean; sort_order: number }[];
@@ -147,7 +148,17 @@ export function QuestionsManager({
                 <Td>{q.competencies && <CompetencyBadge code={q.competencies.code} />}</Td>
                 <Td className="text-slate-500">{q.question_sets?.set_name ?? '—'}</Td>
                 <Td className="text-slate-500">{QUESTION_TYPE_LABELS[q.question_type]}</Td>
-                <Td className="max-w-sm truncate" title={q.question_text}>{q.question_text}</Td>
+                <Td className="max-w-sm" title={q.question_text}>
+                  <span className="flex items-center gap-1.5">
+                    {q.image_url && (
+                      <ImageIcon
+                        className="h-3.5 w-3.5 shrink-0 text-brand-navy-600"
+                        aria-label="This question includes an image"
+                      />
+                    )}
+                    <span className="truncate">{q.question_text}</span>
+                  </span>
+                </Td>
                 <Td>{q.marks}</Td>
                 <Td className="text-slate-500">{q.difficulty ? DIFFICULTY_LABELS[q.difficulty] : '—'}</Td>
                 <Td>
@@ -173,6 +184,7 @@ export function QuestionsManager({
                             difficulty: q.difficulty,
                             explanation_admin_only: q.explanation_admin_only,
                             active: q.active,
+                            image_url: q.image_url,
                             options: [...q.question_options]
                               .sort((a, b) => a.sort_order - b.sort_order)
                               .map((o) => ({ option_key: o.option_key, option_text: o.option_text, is_correct: o.is_correct })),
