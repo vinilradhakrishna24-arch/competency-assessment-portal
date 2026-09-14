@@ -36,7 +36,7 @@ export function WelcomeScreen({
         <div className="mb-6 flex flex-col items-center text-center">
           {info.logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={info.logoUrl} alt="" className="mb-3 h-12 w-12 rounded-xl object-contain" />
+            <img src={info.logoUrl} alt="" className="mb-4 h-20 w-auto max-w-[320px] object-contain" />
           ) : (
             <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-brand-navy-900 text-white">
               <ShieldCheck className="h-6 w-6" />

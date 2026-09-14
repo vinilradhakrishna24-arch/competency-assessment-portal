@@ -39,7 +39,7 @@ export function LoginForm({ portalName, logoUrl }: { portalName: string; logoUrl
       <div className="mb-8 flex flex-col items-center text-center">
         {logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={logoUrl} alt="" className="mb-4 h-14 w-auto max-w-[220px] object-contain" />
+          <img src={logoUrl} alt="" className="mb-4 h-20 w-auto max-w-[320px] object-contain" />
         ) : (
           <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-navy-900 text-white">
             <ShieldCheck className="h-6 w-6" aria-hidden="true" />

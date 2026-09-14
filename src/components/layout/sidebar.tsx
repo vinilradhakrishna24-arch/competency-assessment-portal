@@ -50,7 +50,7 @@ export function Sidebar({
     <div className="flex items-center gap-2.5 px-4 py-5">
       {logoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={logoUrl} alt="" className="h-8 w-8 rounded-lg object-contain" />
+        <img src={logoUrl} alt="" className="h-9 w-auto max-w-[152px] shrink-0 object-contain" />
       ) : (
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-navy-900 text-white">
           <ShieldCheck className="h-4.5 w-4.5" aria-hidden="true" />

@@ -3,6 +3,24 @@ import { formatDate, formatScore } from '@/lib/utils';
 
 Font.registerHyphenationCallback((word) => [word]);
 
+// Trebuchet MS is a licensed Microsoft font with no built-in equivalent in
+// @react-pdf/renderer (it only ships the 14 base PDF fonts). It is
+// registered here — sourced from the organization's own licensed Windows
+// install — as remote URLs to the app's own /fonts assets, the same way
+// the logo is already referenced by absolute URL, so the PDF worker can
+// fetch it at render time regardless of the serverless bundling target.
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://competency-assessment-portal.netlify.app';
+
+Font.register({
+  family: 'Trebuchet MS',
+  fonts: [
+    { src: `${SITE_URL}/fonts/trebuc.ttf`, fontWeight: 'normal', fontStyle: 'normal' },
+    { src: `${SITE_URL}/fonts/trebucbd.ttf`, fontWeight: 'bold', fontStyle: 'normal' },
+    { src: `${SITE_URL}/fonts/trebucit.ttf`, fontWeight: 'normal', fontStyle: 'italic' },
+    { src: `${SITE_URL}/fonts/trebucbi.ttf`, fontWeight: 'bold', fontStyle: 'italic' },
+  ],
+});
+
 const COMPETENCY_ACCENTS: Record<string, string> = {
   LOA: '#0F5C4A',
   SFT: '#8A5A00',
@@ -12,7 +30,7 @@ const COMPETENCY_ACCENTS: Record<string, string> = {
 const styles = StyleSheet.create({
   page: {
     padding: 0,
-    fontFamily: 'Helvetica',
+    fontFamily: 'Trebuchet MS',
     backgroundColor: '#FFFFFF',
   },
   border: {
@@ -45,17 +63,18 @@ const styles = StyleSheet.create({
   header: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 },
   // The Shaher United logo is a wide horizontal lockup (icon + Arabic +
   // English wordmark), not a square mark — sizing it as a square crushes
-  // the wordmark unreadably small. Fix the width and let height follow the
-  // source aspect ratio via objectFit so the full lockup stays legible.
-  logo: { width: 220, height: 30, marginBottom: 10, objectFit: 'contain' },
+  // the wordmark unreadably small. Fix the width (tuned to the source
+  // image's ~10.74:1 aspect ratio) and let objectFit guard against any
+  // future logo-file swap with a different ratio.
+  logo: { width: 300, height: 28, marginBottom: 14, objectFit: 'contain' },
   companyName: { fontSize: 11, color: '#475569', letterSpacing: 1.5, textTransform: 'uppercase' },
-  title: { fontSize: 20, color: '#0F172A', fontFamily: 'Helvetica-Bold', marginTop: 6, letterSpacing: 0.5, textTransform: 'uppercase' },
+  title: { fontSize: 20, color: '#0F172A', fontFamily: 'Trebuchet MS', fontWeight: 'bold', marginTop: 6, letterSpacing: 0.5, textTransform: 'uppercase' },
   body: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, flexGrow: 1, justifyContent: 'center' },
   presentedTo: { fontSize: 10, color: '#64748B', textTransform: 'uppercase', letterSpacing: 2 },
-  candidateName: { fontSize: 28, fontFamily: 'Helvetica-Bold', color: '#0F172A', marginTop: 4 },
+  candidateName: { fontSize: 28, fontFamily: 'Trebuchet MS', fontWeight: 'bold', color: '#0F172A', marginTop: 4 },
   statement: { fontSize: 13, color: '#334155', marginTop: 14, textAlign: 'center' },
   statusLabel: { fontSize: 9, color: '#64748B', textTransform: 'uppercase', letterSpacing: 2, marginTop: 16 },
-  competencyLine: { fontSize: 17, fontFamily: 'Helvetica-Bold', marginTop: 4, textAlign: 'center', textTransform: 'uppercase' },
+  competencyLine: { fontSize: 17, fontFamily: 'Trebuchet MS', fontWeight: 'bold', marginTop: 4, textAlign: 'center', textTransform: 'uppercase' },
   competencyCode: { fontSize: 9, color: '#94A3B8', marginTop: 2 },
   metaGrid: {
     marginTop: 24,
@@ -66,7 +85,7 @@ const styles = StyleSheet.create({
   },
   metaItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 90 },
   metaLabel: { fontSize: 8, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 1 },
-  metaValue: { fontSize: 11, color: '#1E293B', marginTop: 3, fontFamily: 'Helvetica-Bold' },
+  metaValue: { fontSize: 11, color: '#1E293B', marginTop: 3, fontFamily: 'Trebuchet MS', fontWeight: 'bold' },
   footer: {
     width: '100%',
     display: 'flex',
@@ -75,7 +94,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   footerText: { fontSize: 8, color: '#94A3B8', maxWidth: 420, textAlign: 'center' },
-  certNumber: { fontSize: 9, color: '#475569', fontFamily: 'Helvetica-Bold' },
+  certNumber: { fontSize: 9, color: '#475569', fontFamily: 'Trebuchet MS', fontWeight: 'bold' },
 });
 
 export interface CertificatePdfProps {
