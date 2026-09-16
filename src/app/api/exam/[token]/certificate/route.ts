@@ -8,12 +8,21 @@ export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const guard = await requireVerifiedExam(token, { allowStatuses: ['PASSED', 'FAILED'] });
+  const guard = await requireVerifiedExam(token, {
+    allowStatuses: ['PASSED', 'FAILED', 'AWAITING_APPROVAL', 'CERTIFIED'],
+  });
   if (!guard.ok) {
     return NextResponse.json({ ok: false, code: guard.code, message: guard.message }, { status: guard.status });
   }
 
-  if (guard.assessment.status !== 'PASSED') {
+  if (guard.assessment.status === 'AWAITING_APPROVAL') {
+    return NextResponse.json(
+      { ok: false, code: 'AWAITING_APPROVAL', message: 'Your result is still pending management approval.' },
+      { status: 403 }
+    );
+  }
+
+  if (!['PASSED', 'CERTIFIED'].includes(guard.assessment.status)) {
     return NextResponse.json(
       { ok: false, code: 'NOT_PASSED', message: 'A certificate is only available for a passed assessment.' },
       { status: 403 }

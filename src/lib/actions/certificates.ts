@@ -3,7 +3,7 @@
 import { requireUser } from '@/lib/auth/session';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
-export async function getCertificates(filters?: { competencyId?: string; search?: string }) {
+export async function getCertificates(filters?: { competencyId?: string; competencyIds?: string[]; search?: string }) {
   await requireUser();
   const supabase = await createSupabaseServerClient();
   let query = supabase
@@ -13,7 +13,11 @@ export async function getCertificates(filters?: { competencyId?: string; search?
     )
     .order('issued_at', { ascending: false });
 
-  if (filters?.competencyId) query = query.eq('competency_id', filters.competencyId);
+  if (filters?.competencyId) {
+    query = query.eq('competency_id', filters.competencyId);
+  } else if (filters?.competencyIds) {
+    query = query.in('competency_id', filters.competencyIds);
+  }
 
   const { data, error } = await query.limit(500);
   if (error) throw new Error(error.message);

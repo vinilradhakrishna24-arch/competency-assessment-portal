@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { Copy, Check, Download, RotateCcw, Ban, Link2, ArrowLeft } from 'lucide-react';
+import { Copy, Check, Download, RotateCcw, Ban, Link2, ArrowLeft, ClipboardCheck } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, ConfirmDialog } from '@/components/ui/dialog';
@@ -174,9 +174,12 @@ export function AssessmentDetail({
     }
   }
 
-  const isCancellable = !['PASSED', 'FAILED', 'CANCELLED'].includes(assessment.status);
+  const isCancellable = !['PASSED', 'FAILED', 'CANCELLED', 'AWAITING_APPROVAL', 'CERTIFIED'].includes(
+    assessment.status
+  );
   const canReassess = assessment.status === 'FAILED';
   const canRegenerateLink = ['PENDING', 'EXPIRED'].includes(assessment.status);
+  const isAwaitingApproval = assessment.status === 'AWAITING_APPROVAL';
 
   return (
     <div className="space-y-6">
@@ -290,7 +293,7 @@ export function AssessmentDetail({
             </CardContent>
           </Card>
 
-          {(assessment.status === 'PASSED' || assessment.status === 'FAILED') && (
+          {['PASSED', 'FAILED', 'AWAITING_APPROVAL', 'CERTIFIED'].includes(assessment.status) && (
             <Card>
               <CardHeader>
                 <CardTitle>Result</CardTitle>
@@ -322,6 +325,13 @@ export function AssessmentDetail({
                 <CardTitle>Actions</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
+                {isAwaitingApproval && (
+                  <Button className="w-full" asChild>
+                    <Link href="/approvals">
+                      <ClipboardCheck className="h-4 w-4" /> Review in Pending Approval
+                    </Link>
+                  </Button>
+                )}
                 {canRegenerateLink && (
                   <Button variant="outline" className="w-full" onClick={() => setRegenOpen(true)}>
                     <Link2 className="h-4 w-4" /> Regenerate Exam Link
@@ -337,7 +347,7 @@ export function AssessmentDetail({
                     <Ban className="h-4 w-4" /> Cancel Assessment
                   </Button>
                 )}
-                {!isCancellable && !canReassess && !canRegenerateLink && (
+                {!isCancellable && !canReassess && !canRegenerateLink && !isAwaitingApproval && (
                   <p className="text-sm text-slate-400">No actions available for this status.</p>
                 )}
               </CardContent>

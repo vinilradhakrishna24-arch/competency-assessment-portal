@@ -8,7 +8,9 @@ export const runtime = 'nodejs';
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const guard = await requireVerifiedExam(token, { allowStatuses: ['PENDING', 'STARTED', 'PASSED', 'FAILED'] });
+  const guard = await requireVerifiedExam(token, {
+    allowStatuses: ['PENDING', 'STARTED', 'PASSED', 'FAILED', 'AWAITING_APPROVAL', 'CERTIFIED'],
+  });
   if (!guard.ok) {
     return NextResponse.json({ ok: false, code: guard.code, message: guard.message }, { status: guard.status });
   }
@@ -40,7 +42,9 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       started_at: assessment.started_at,
       ends_at: assessment.ends_at,
       link_expires_at: assessment.link_expires_at,
-      score_percentage: ['PASSED', 'FAILED'].includes(assessment.status) ? assessment.score_percentage : null,
+      score_percentage: ['PASSED', 'FAILED', 'AWAITING_APPROVAL', 'CERTIFIED'].includes(assessment.status)
+        ? assessment.score_percentage
+        : null,
     },
     candidate,
     competency,

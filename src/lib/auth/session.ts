@@ -1,13 +1,25 @@
 import 'server-only';
 import { redirect } from 'next/navigation';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import type { RoleName } from '@/types/database';
+import type { RoleName, CompetencyStream } from '@/types/database';
 
 export interface CurrentUser {
   id: string;
   email: string;
   fullName: string;
+  /** The actual authorization key -- roles.permission_level (migration
+   * 0012). Never derive gating from roleName, which is a free-text label
+   * ("HSE Manager") that can vary per organization. */
   role: RoleName;
+  /** Display label for the profile's role row, e.g. "Viewer / Management"
+   * or "HSE Manager". Purely cosmetic. */
+  roleName: string;
+  /** Null = unrestricted (sees every competency stream, e.g. Admin or the
+   * default Viewer role). A non-null array restricts a viewer-tier role to
+   * only those streams -- e.g. HSE Manager -> ['hse'], which is how the
+   * "HSE Manager must never see technical data" requirement is enforced
+   * both here (nav) and at the RLS layer (migration 0012). */
+  streamScope: CompetencyStream[] | null;
   active: boolean;
 }
 
@@ -24,21 +36,24 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id, full_name, email, active, roles(name)')
+    .select('id, full_name, email, active, roles(name, permission_level, stream_scope)')
     .eq('id', user.id)
     .maybeSingle();
 
   if (!profile || !profile.active) return null;
 
-  const roleRow = profile.roles as unknown as { name: RoleName } | { name: RoleName }[] | null;
-  const role = Array.isArray(roleRow) ? roleRow[0]?.name : roleRow?.name;
-  if (!role) return null;
+  type RoleShape = { name: string; permission_level: RoleName; stream_scope: CompetencyStream[] | null };
+  const roleRow = profile.roles as unknown as RoleShape | RoleShape[] | null;
+  const roleData = Array.isArray(roleRow) ? roleRow[0] : roleRow;
+  if (!roleData) return null;
 
   return {
     id: profile.id,
     email: profile.email,
     fullName: profile.full_name,
-    role,
+    role: roleData.permission_level,
+    roleName: roleData.name,
+    streamScope: roleData.stream_scope,
     active: profile.active,
   };
 }

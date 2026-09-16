@@ -342,6 +342,10 @@ export async function authorizeReassessment(
 export async function getAssessments(filters?: {
   status?: string;
   competencyId?: string;
+  /** Restrict to a set of competency ids (e.g. every competency in one
+   * stream) when no single competencyId is picked -- lets a page-level
+   * `?stream=` filter narrow the list without a join-based query. */
+  competencyIds?: string[];
   candidateId?: string;
 }) {
   await requireUser();
@@ -352,7 +356,11 @@ export async function getAssessments(filters?: {
     .order('created_at', { ascending: false });
 
   if (filters?.status) query = query.eq('status', filters.status);
-  if (filters?.competencyId) query = query.eq('competency_id', filters.competencyId);
+  if (filters?.competencyId) {
+    query = query.eq('competency_id', filters.competencyId);
+  } else if (filters?.competencyIds) {
+    query = query.in('competency_id', filters.competencyIds);
+  }
   if (filters?.candidateId) query = query.eq('candidate_id', filters.candidateId);
 
   const { data, error } = await query.limit(500);

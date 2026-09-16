@@ -9,15 +9,18 @@ export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  // Allow PASSED/FAILED through too so a retried/duplicate submit click
-  // (double-click, multi-tab, network retry) is answered idempotently
-  // instead of erroring.
-  const guard = await requireVerifiedExam(token, { allowStatuses: ['STARTED', 'PASSED', 'FAILED'] });
+  // Allow every terminal status through too so a retried/duplicate submit
+  // click (double-click, multi-tab, network retry) is answered idempotently
+  // instead of erroring -- including the HSE AWAITING_APPROVAL/CERTIFIED
+  // states, which a technical assessment never reaches.
+  const guard = await requireVerifiedExam(token, {
+    allowStatuses: ['STARTED', 'PASSED', 'FAILED', 'AWAITING_APPROVAL', 'CERTIFIED'],
+  });
   if (!guard.ok) {
     return NextResponse.json({ ok: false, code: guard.code, message: guard.message }, { status: guard.status });
   }
 
-  const wasAlreadyFinal = guard.assessment.status === 'PASSED' || guard.assessment.status === 'FAILED';
+  const wasAlreadyFinal = guard.assessment.status !== 'STARTED';
   const admin = createSupabaseAdminClient();
 
   const { data: result, error } = await admin.rpc('fn_submit_assessment', {

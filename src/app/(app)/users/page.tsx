@@ -1,15 +1,15 @@
 import { PageHeader } from '@/components/ui/page-header';
 import { UsersTable } from '@/components/users/users-table';
-import { getUsers } from '@/lib/actions/users';
+import { getUsers, getRoles } from '@/lib/actions/users';
 import { requireAdmin } from '@/lib/auth/session';
 
 export default async function UsersPage() {
-  const [currentUser, users] = await Promise.all([requireAdmin(), getUsers()]);
+  const [currentUser, users, roles] = await Promise.all([requireAdmin(), getUsers(), getRoles()]);
 
   return (
     <div>
-      <PageHeader title="Users & Roles" description="Manage who can access the portal as an Admin/Examiner or Viewer." />
-      <UsersTable initialUsers={users as never} currentUserId={currentUser.id} />
+      <PageHeader title="Users & Roles" description="Manage who can access the portal, and with which role." />
+      <UsersTable initialUsers={users as never} roles={roles} currentUserId={currentUser.id} />
     </div>
   );
 }

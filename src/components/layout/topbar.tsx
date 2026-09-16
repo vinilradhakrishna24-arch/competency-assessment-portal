@@ -11,8 +11,8 @@ export function Topbar({ user }: { user: CurrentUser }) {
         <p className="truncate text-xs text-slate-500">{user.email}</p>
       </div>
       <div className="flex items-center gap-3">
-        <Badge className="border-slate-200 bg-slate-50 text-slate-600 capitalize">
-          {user.role === 'admin' ? 'Admin / Examiner' : 'Viewer / Management'}
+        <Badge className="border-slate-200 bg-slate-50 text-slate-600">
+          {user.role === 'admin' ? 'Admin / Examiner' : user.roleName}
         </Badge>
         <form action={signOutAction}>
           <button

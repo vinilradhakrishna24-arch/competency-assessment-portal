@@ -17,7 +17,9 @@ type ViewState =
   | { kind: 'welcome'; info: WelcomeInfo }
   | { kind: 'exam' }
   | { kind: 'review' }
-  | { kind: 'result'; passed: boolean; score: number; assessmentCode: string };
+  | { kind: 'result'; status: ResultStatus; score: number; assessmentCode: string };
+
+type ResultStatus = 'PASSED' | 'FAILED' | 'AWAITING_APPROVAL' | 'CERTIFIED';
 
 interface StateResponse {
   ok: boolean;
@@ -119,10 +121,10 @@ export function ExamApp({
         return;
       }
 
-      if (data.assessment.status === 'PASSED' || data.assessment.status === 'FAILED') {
+      if (['PASSED', 'FAILED', 'AWAITING_APPROVAL', 'CERTIFIED'].includes(data.assessment.status)) {
         setView({
           kind: 'result',
-          passed: data.assessment.status === 'PASSED',
+          status: data.assessment.status as ResultStatus,
           score: data.assessment.score_percentage ?? 0,
           assessmentCode: data.assessment.assessment_code,
         });
@@ -223,7 +225,12 @@ export function ExamApp({
 
   const finalizeSubmission = React.useCallback(
     (data: { status: string; score_percentage: number; passed: boolean; assessment_code: string }) => {
-      setView({ kind: 'result', passed: data.passed, score: data.score_percentage, assessmentCode: data.assessment_code });
+      setView({
+        kind: 'result',
+        status: data.status as ResultStatus,
+        score: data.score_percentage,
+        assessmentCode: data.assessment_code,
+      });
     },
     []
   );
@@ -309,7 +316,7 @@ export function ExamApp({
 
   return (
     <ResultScreen
-      passed={view.passed}
+      status={view.status}
       scorePercentage={view.score}
       competencyCode={competency?.code ?? ''}
       competencyName={competency?.competency_name ?? ''}

@@ -168,6 +168,9 @@ export const brandingSchema = z.object({
 export const inviteUserSchema = z.object({
   full_name: z.string().trim().min(1, 'Full name is required').max(200),
   email: z.string().trim().email('Enter a valid email'),
-  role: z.enum(['admin', 'viewer']),
+  // A specific roles.id, not the binary admin/viewer permission_level --
+  // there can be multiple viewer-tier roles (e.g. "Viewer / Management"
+  // and "HSE Manager", each with a different stream_scope).
+  role_id: z.string().uuid('Select a role'),
   password: z.string().min(8, 'Password must be at least 8 characters').max(128),
 });

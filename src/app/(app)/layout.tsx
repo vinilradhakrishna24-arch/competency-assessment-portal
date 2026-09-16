@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { Toaster } from 'sonner';
 import { requireUser } from '@/lib/auth/session';
 import { getBranding } from '@/lib/branding';
@@ -9,7 +10,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen bg-slate-50">
-      <Sidebar role={user.role} portalName={branding.portal_name} logoUrl={branding.logo_url} />
+      <Suspense fallback={null}>
+        <Sidebar
+          role={user.role}
+          streamScope={user.streamScope}
+          portalName={branding.portal_name}
+          logoUrl={branding.logo_url}
+        />
+      </Suspense>
       <div className="flex min-h-screen flex-1 flex-col">
         <Topbar user={user} />
         <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>

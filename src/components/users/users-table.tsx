@@ -9,7 +9,15 @@ import { FormField, Input, Select } from '@/components/ui/input';
 import { Table, Thead, Tbody, Tr, Th, Td } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { getUsers, createUser, changeUserRole, setUserActive, deleteUser } from '@/lib/actions/users';
-import type { RoleName } from '@/types/database';
+import type { CompetencyStream, RoleName } from '@/types/database';
+
+interface RoleOption {
+  id: string;
+  name: string;
+  permission_level: RoleName;
+  stream_scope: CompetencyStream[] | null;
+  description: string | null;
+}
 
 interface UserRow {
   id: string;
@@ -17,20 +25,28 @@ interface UserRow {
   email: string;
   active: boolean;
   created_at: string;
-  roles: { name: RoleName } | { name: RoleName }[] | null;
+  roles: RoleOption | RoleOption[] | null;
 }
 
-function roleOf(row: UserRow): RoleName {
+function roleOf(row: UserRow): RoleOption | null {
   const r = row.roles;
-  return (Array.isArray(r) ? r[0]?.name : r?.name) ?? 'viewer';
+  return (Array.isArray(r) ? r[0] : r) ?? null;
 }
 
-export function UsersTable({ initialUsers, currentUserId }: { initialUsers: UserRow[]; currentUserId: string }) {
+export function UsersTable({
+  initialUsers,
+  roles,
+  currentUserId,
+}: {
+  initialUsers: UserRow[];
+  roles: RoleOption[];
+  currentUserId: string;
+}) {
   const [users, setUsers] = React.useState(initialUsers);
   const [inviteOpen, setInviteOpen] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
-  const [form, setForm] = React.useState({ full_name: '', email: '', role: 'viewer' as RoleName, password: '' });
+  const [form, setForm] = React.useState({ full_name: '', email: '', role_id: roles[0]?.id ?? '', password: '' });
   const [deleting, setDeleting] = React.useState<UserRow | null>(null);
   const [deleteBusy, setDeleteBusy] = React.useState(false);
 
@@ -54,12 +70,12 @@ export function UsersTable({ initialUsers, currentUserId }: { initialUsers: User
 
     toast.success('User created');
     setInviteOpen(false);
-    setForm({ full_name: '', email: '', role: 'viewer', password: '' });
+    setForm({ full_name: '', email: '', role_id: roles[0]?.id ?? '', password: '' });
     refresh();
   }
 
-  async function handleRoleChange(userId: string, role: RoleName) {
-    const result = await changeUserRole(userId, role);
+  async function handleRoleChange(userId: string, roleId: string) {
+    const result = await changeUserRole(userId, roleId);
     if (!result.ok) {
       toast.error(result.error ?? 'Failed to change role');
       return;
@@ -123,13 +139,19 @@ export function UsersTable({ initialUsers, currentUserId }: { initialUsers: User
                 <Td>
                   <Select
                     className="w-auto"
-                    value={role}
-                    onChange={(e) => handleRoleChange(u.id, e.target.value as RoleName)}
+                    value={role?.id ?? ''}
+                    onChange={(e) => handleRoleChange(u.id, e.target.value)}
                     disabled={isSelf}
                   >
-                    <option value="admin">Admin / Examiner</option>
-                    <option value="viewer">Viewer / Management</option>
+                    {roles.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                      </option>
+                    ))}
                   </Select>
+                  {role?.stream_scope && (
+                    <span className="ml-1.5 text-xs text-slate-400">({role.stream_scope.join(', ')} only)</span>
+                  )}
                 </Td>
                 <Td>
                   <Badge className={u.active ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-100 text-slate-500'}>
@@ -174,9 +196,12 @@ export function UsersTable({ initialUsers, currentUserId }: { initialUsers: User
             <Input id="u_email" type="email" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} />
           </FormField>
           <FormField label="Role" htmlFor="u_role" required>
-            <Select id="u_role" value={form.role} onChange={(e) => setForm((p) => ({ ...p, role: e.target.value as RoleName }))}>
-              <option value="admin">Admin / Examiner</option>
-              <option value="viewer">Viewer / Management</option>
+            <Select id="u_role" value={form.role_id} onChange={(e) => setForm((p) => ({ ...p, role_id: e.target.value }))}>
+              {roles.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
             </Select>
           </FormField>
           <FormField label="Temporary Password" htmlFor="u_password" required error={errors.password} hint="At least 8 characters. Share this with the user securely.">

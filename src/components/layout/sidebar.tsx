@@ -2,47 +2,94 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { Menu, X, ShieldCheck } from 'lucide-react';
-import { NAV_ITEMS } from '@/components/layout/nav-items';
-import type { RoleName } from '@/types/database';
+import { STREAM_NAV_ITEMS, SHARED_NAV_ITEMS, type NavItem } from '@/components/layout/nav-items';
+import type { CompetencyStream, RoleName } from '@/types/database';
 import { cn } from '@/lib/utils';
 
 export function Sidebar({
   role,
+  streamScope,
   portalName,
   logoUrl,
 }: {
   role: RoleName;
+  /** Null = unrestricted (sees both streams). See CurrentUser.streamScope. */
+  streamScope: CompetencyStream[] | null;
   portalName: string;
   logoUrl: string | null;
 }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const currentStream = searchParams.get('stream');
   const [mobileOpen, setMobileOpen] = React.useState(false);
-  const items = NAV_ITEMS.filter((item) => item.roles.includes(role));
+
+  const canSeeStream = (stream: CompetencyStream) => !streamScope || streamScope.includes(stream);
+  const forStream = (stream: CompetencyStream): NavItem[] =>
+    STREAM_NAV_ITEMS.filter((item) => item.roles.includes(role)).map((item) => ({
+      ...item,
+      stream,
+      href: `${item.href}?stream=${stream}`,
+    }));
+
+  const technicalItems = canSeeStream('technical') ? forStream('technical') : [];
+  const hseItems = canSeeStream('hse') ? forStream('hse') : [];
+  const sharedItems = SHARED_NAV_ITEMS.filter((item) => item.roles.includes(role));
+
+  // A stream-scoped role only ever has one section to show, so the
+  // "Technical" / "HSE" headers only earn their keep when there are two.
+  const showSectionLabels = technicalItems.length > 0 && hseItems.length > 0;
+
+  function isActive(item: NavItem): boolean {
+    const [base] = item.href.split('?');
+    if (pathname !== base && !pathname.startsWith(base + '/')) return false;
+    if (!item.stream) return true;
+    // No ?stream= in the URL yet (e.g. a bookmarked bare /dashboard link)
+    // defaults to Technical, matching every page's own server-side default.
+    return currentStream ? currentStream === item.stream : item.stream === 'technical';
+  }
+
+  function renderLink(item: NavItem) {
+    const active = isActive(item);
+    const Icon = item.icon;
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        onClick={() => setMobileOpen(false)}
+        className={cn(
+          'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+          active ? 'bg-brand-navy-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+        )}
+      >
+        <Icon className="h-4.5 w-4.5 shrink-0" aria-hidden="true" />
+        <span className="truncate">{item.label}</span>
+      </Link>
+    );
+  }
+
+  function renderSection(label: string, items: NavItem[]) {
+    if (items.length === 0) return null;
+    return (
+      <div className="flex flex-col gap-1">
+        {showSectionLabels && (
+          <p className="px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+        )}
+        {items.map(renderLink)}
+      </div>
+    );
+  }
 
   const NavList = (
     <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-4">
-      {items.map((item) => {
-        const active = pathname === item.href || pathname.startsWith(item.href + '/');
-        const Icon = item.icon;
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={() => setMobileOpen(false)}
-            className={cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-              active
-                ? 'bg-brand-navy-900 text-white shadow-sm'
-                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-            )}
-          >
-            <Icon className="h-4.5 w-4.5 shrink-0" aria-hidden="true" />
-            <span className="truncate">{item.label}</span>
-          </Link>
-        );
-      })}
+      {renderSection('Technical', technicalItems)}
+      {renderSection('HSE', hseItems)}
+      {sharedItems.length > 0 && (
+        <div className={cn('flex flex-col gap-1', (technicalItems.length > 0 || hseItems.length > 0) && 'mt-2 border-t border-slate-100 pt-2')}>
+          {sharedItems.map(renderLink)}
+        </div>
+      )}
     </nav>
   );
 

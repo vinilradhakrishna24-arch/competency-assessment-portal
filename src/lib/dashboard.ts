@@ -1,5 +1,6 @@
 import 'server-only';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import type { CompetencyStream } from '@/types/database';
 
 export interface DashboardData {
   kpis: {
@@ -9,11 +10,13 @@ export interface DashboardData {
     inProgress: number;
     passed: number;
     failed: number;
+    awaitingApproval: number;
     expired: number;
     passPercentage: number;
-    loaCompetent: number;
-    sftCompetent: number;
-    ptwCompetent: number;
+    /** One entry per active competency in this stream, replacing the old
+     * hardcoded LOA/SFT/PTW-only fields -- works for any stream, including
+     * HSE's two (and counting) competencies. */
+    competentByCompetency: { code: string; name: string; count: number }[];
     certificatesIssued: number;
   };
   byMonth: { month: string; count: number }[];
@@ -37,24 +40,36 @@ export interface DashboardData {
   }[];
 }
 
-export async function getDashboardData(): Promise<DashboardData> {
+export async function getDashboardData(stream: CompetencyStream = 'technical'): Promise<DashboardData> {
   const supabase = await createSupabaseServerClient();
 
-  const [{ data: assessments }, { data: certificates }, { count: totalCandidates }] = await Promise.all([
-    supabase
-      .from('assessments')
-      .select(
-        'id, status, created_at, updated_at, link_expires_at, competency_id, competencies(code), candidates(full_name, project_contract, department)'
-      )
-      .order('created_at', { ascending: false })
-      .limit(2000),
-    supabase.from('certificates').select('id'),
-    supabase.from('candidates').select('id', { count: 'exact', head: true }).is('deleted_at', null),
-  ]);
+  const [{ data: assessmentsRaw }, { data: certificates }, { count: totalCandidates }, { data: streamCompetencies }] =
+    await Promise.all([
+      supabase
+        .from('assessments')
+        .select(
+          'id, status, created_at, updated_at, link_expires_at, competency_id, competencies(code, competency_name, stream), candidates(full_name, project_contract, department)'
+        )
+        .order('created_at', { ascending: false })
+        .limit(2000),
+      supabase.from('certificates').select('id, competency_id, competencies(stream)'),
+      supabase.from('candidates').select('id', { count: 'exact', head: true }).is('deleted_at', null),
+      supabase.from('competencies').select('code, competency_name').eq('stream', stream).eq('active', true).order('code'),
+    ]);
 
-  const rows = assessments ?? [];
-  const decided = rows.filter((r) => r.status === 'PASSED' || r.status === 'FAILED').length;
-  const passedCount = rows.filter((r) => r.status === 'PASSED').length;
+  // Row-level security already means an HSE-scoped viewer never gets a
+  // technical row back here -- this stream filter is for an unrestricted
+  // Admin/Viewer, who sees every stream, to pick one at a time.
+  const rows = (assessmentsRaw ?? []).filter(
+    (r) => (r.competencies as unknown as { stream: string } | null)?.stream === stream
+  );
+  const certificatesInStream = (certificates ?? []).filter(
+    (c) => (c.competencies as unknown as { stream: string } | null)?.stream === stream
+  );
+
+  const passedCount = rows.filter((r) => r.status === 'PASSED' || r.status === 'CERTIFIED').length;
+  const failedCount = rows.filter((r) => r.status === 'FAILED').length;
+  const decided = passedCount + failedCount;
 
   const kpis = {
     total: rows.length,
@@ -62,13 +77,20 @@ export async function getDashboardData(): Promise<DashboardData> {
     pending: rows.filter((r) => r.status === 'PENDING').length,
     inProgress: rows.filter((r) => r.status === 'STARTED').length,
     passed: passedCount,
-    failed: rows.filter((r) => r.status === 'FAILED').length,
+    failed: failedCount,
+    awaitingApproval: rows.filter((r) => r.status === 'AWAITING_APPROVAL').length,
     expired: rows.filter((r) => r.status === 'EXPIRED').length,
     passPercentage: decided ? Math.round((passedCount / decided) * 100) : 0,
-    loaCompetent: rows.filter((r) => r.status === 'PASSED' && (r.competencies as unknown as { code: string } | null)?.code === 'LOA').length,
-    sftCompetent: rows.filter((r) => r.status === 'PASSED' && (r.competencies as unknown as { code: string } | null)?.code === 'SFT').length,
-    ptwCompetent: rows.filter((r) => r.status === 'PASSED' && (r.competencies as unknown as { code: string } | null)?.code === 'PTW').length,
-    certificatesIssued: certificates?.length ?? 0,
+    competentByCompetency: (streamCompetencies ?? []).map((c) => ({
+      code: c.code,
+      name: c.competency_name,
+      count: rows.filter(
+        (r) =>
+          (r.status === 'PASSED' || r.status === 'CERTIFIED') &&
+          (r.competencies as unknown as { code: string } | null)?.code === c.code
+      ).length,
+    })),
+    certificatesIssued: certificatesInStream.length,
   };
 
   const monthMap = new Map<string, number>();
@@ -86,17 +108,16 @@ export async function getDashboardData(): Promise<DashboardData> {
     { name: 'Failed', value: kpis.failed },
   ];
 
-  const competencyDistribution = [
-    { name: 'LOA', value: rows.filter((r) => (r.competencies as unknown as { code: string } | null)?.code === 'LOA').length },
-    { name: 'SFT', value: rows.filter((r) => (r.competencies as unknown as { code: string } | null)?.code === 'SFT').length },
-    { name: 'PTW', value: rows.filter((r) => (r.competencies as unknown as { code: string } | null)?.code === 'PTW').length },
-  ];
+  const codes = (streamCompetencies ?? []).map((c) => c.code);
+  const competencyDistribution = codes.map((code) => ({
+    name: code,
+    value: rows.filter((r) => (r.competencies as unknown as { code: string } | null)?.code === code).length,
+  }));
 
-  const codes = ['LOA', 'SFT', 'PTW'];
   const passRateByCompetency = codes.map((code) => {
     const forCode = rows.filter((r) => (r.competencies as unknown as { code: string } | null)?.code === code);
-    const decided = forCode.filter((r) => r.status === 'PASSED' || r.status === 'FAILED');
-    const passed = forCode.filter((r) => r.status === 'PASSED').length;
+    const decided = forCode.filter((r) => r.status === 'PASSED' || r.status === 'FAILED' || r.status === 'CERTIFIED');
+    const passed = forCode.filter((r) => r.status === 'PASSED' || r.status === 'CERTIFIED').length;
     return { name: code, passRate: decided.length ? Math.round((passed / decided.length) * 100) : 0 };
   });
 
@@ -107,7 +128,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       const label = candidate?.[key] || 'Unassigned';
       const entry = map.get(label) ?? { competent: 0, total: 0 };
       entry.total += 1;
-      if (r.status === 'PASSED') entry.competent += 1;
+      if (r.status === 'PASSED' || r.status === 'CERTIFIED') entry.competent += 1;
       map.set(label, entry);
     });
     return Array.from(map.entries())

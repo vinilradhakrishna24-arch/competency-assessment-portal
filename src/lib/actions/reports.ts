@@ -8,6 +8,9 @@ export interface ReportFilters {
   dateFrom?: string;
   dateTo?: string;
   competencyId?: string;
+  /** Restrict to a set of competency ids (e.g. every competency in one
+   * stream) when no single competencyId is picked. */
+  competencyIds?: string[];
   projectContract?: string;
   department?: string;
   candidateId?: string;
@@ -49,7 +52,11 @@ export async function getReportRows(filters: ReportFilters = {}): Promise<Report
 
   if (filters.dateFrom) query = query.gte('created_at', filters.dateFrom);
   if (filters.dateTo) query = query.lte('created_at', filters.dateTo);
-  if (filters.competencyId) query = query.eq('competency_id', filters.competencyId);
+  if (filters.competencyId) {
+    query = query.eq('competency_id', filters.competencyId);
+  } else if (filters.competencyIds) {
+    query = query.in('competency_id', filters.competencyIds);
+  }
   if (filters.candidateId) query = query.eq('candidate_id', filters.candidateId);
   if (filters.result) query = query.eq('status', filters.result);
   if (filters.examinerId) query = query.eq('created_by', filters.examinerId);
