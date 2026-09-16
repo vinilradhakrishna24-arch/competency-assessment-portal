@@ -54,13 +54,14 @@ export async function parseQuestionImportFile(formData: FormData): Promise<Parse
   }
 
   const supabase = await createSupabaseServerClient();
-  const [competenciesRes, questionSetsRes, existingQuestionsRes] = await Promise.all([
+  const [competenciesRes, questionSetsRes, existingQuestionsRes, competencyAreasRes] = await Promise.all([
     supabase.from('competencies').select('id, code'),
     supabase.from('question_sets').select('id, competency_id, set_name'),
     supabase.from('questions').select('competency_id, question_text'),
+    supabase.from('competency_areas').select('id, competency_id, code, area_name'),
   ]);
 
-  if (competenciesRes.error || questionSetsRes.error || existingQuestionsRes.error) {
+  if (competenciesRes.error || questionSetsRes.error || existingQuestionsRes.error || competencyAreasRes.error) {
     return { ok: false, error: 'Failed to load competency/question-set reference data for validation' };
   }
 
@@ -72,7 +73,8 @@ export async function parseQuestionImportFile(formData: FormData): Promise<Parse
     rawRows,
     competenciesRes.data ?? [],
     questionSetsRes.data ?? [],
-    existingKeys
+    existingKeys,
+    competencyAreasRes.data ?? []
   );
   const validCount = rows.filter((r) => r.insert).length;
 

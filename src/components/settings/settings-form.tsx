@@ -2,13 +2,21 @@
 
 import * as React from 'react';
 import { toast } from 'sonner';
+import { Plus, Trash2, EyeOff, Eye } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { FormField, Input, Textarea } from '@/components/ui/input';
+import { Table, Thead, Tbody, Tr, Th, Td } from '@/components/ui/table';
 import { CompetencyBadge } from '@/components/competency/competency-badge';
 import { updateBranding, updateOperationalSettings } from '@/lib/actions/settings';
-import { updateCompetency } from '@/lib/actions/taxonomy';
-import type { Competency, SystemSettingBranding } from '@/types/database';
+import {
+  updateCompetency,
+  createCompetencyArea,
+  updateCompetencyArea,
+  setCompetencyAreaActive,
+  deleteCompetencyArea,
+} from '@/lib/actions/taxonomy';
+import type { Competency, CompetencyArea, SystemSettingBranding } from '@/types/database';
 
 export function SettingsForm({
   branding,
@@ -18,6 +26,7 @@ export function SettingsForm({
   randomization,
   verificationRetry,
   competencies,
+  competencyAreas,
 }: {
   branding: SystemSettingBranding;
   defaultPassMark: number;
@@ -26,7 +35,10 @@ export function SettingsForm({
   randomization: { randomize_questions: boolean; randomize_options: boolean };
   verificationRetry: { max_attempts: number; window_minutes: number; lock_minutes: number };
   competencies: Competency[];
+  competencyAreas?: CompetencyArea[];
 }) {
+  const hseCompetencies = competencies.filter((c) => c.stream === 'hse');
+
   return (
     <div className="space-y-6">
       <BrandingSection branding={branding} />
@@ -38,6 +50,12 @@ export function SettingsForm({
         verificationRetry={verificationRetry}
       />
       <CompetencyPassMarksSection competencies={competencies} />
+      {hseCompetencies.length > 0 && (
+        <>
+          <HseCompetencySettingsSection competencies={hseCompetencies} />
+          <CompetencyAreasManager competencies={hseCompetencies} initialAreas={competencyAreas ?? []} />
+        </>
+      )}
     </div>
   );
 }
@@ -304,6 +322,400 @@ function CompetencyPassMarksSection({ competencies }: { competencies: Competency
             </div>
           </div>
         ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** HSE-only per-competency configuration: RAG amber threshold, certificate
+ * validity window, reassessment waiting period, and whether a pass routes
+ * through manual approval before a certificate is issued. Every field maps
+ * 1:1 to a nullable/defaulted column added in migration 0011 -- nothing
+ * here can affect a technical (LOA/SFT/PTW) competency, since this section
+ * only ever renders for stream === 'hse' rows. */
+function HseCompetencySettingsSection({ competencies }: { competencies: Competency[] }) {
+  const [values, setValues] = React.useState<
+    Record<string, { amber_threshold: number | null; validity_months: number | null; reassessment_wait_days: number; requires_result_approval: boolean }>
+  >(
+    Object.fromEntries(
+      competencies.map((c) => [
+        c.id,
+        {
+          amber_threshold: c.amber_threshold,
+          validity_months: c.validity_months,
+          reassessment_wait_days: c.reassessment_wait_days,
+          requires_result_approval: c.requires_result_approval,
+        },
+      ])
+    )
+  );
+  const [saving, setSaving] = React.useState<string | null>(null);
+
+  function setField<K extends 'amber_threshold' | 'validity_months' | 'reassessment_wait_days' | 'requires_result_approval'>(
+    id: string,
+    key: K,
+    value: (typeof values)[string][K]
+  ) {
+    setValues((prev) => ({ ...prev, [id]: { ...prev[id]!, [key]: value } }));
+  }
+
+  async function handleSave(competency: Competency) {
+    const v = values[competency.id]!;
+    setSaving(competency.id);
+    const result = await updateCompetency(competency.id, {
+      code: competency.code,
+      competency_name: competency.competency_name,
+      description: competency.description ?? '',
+      pass_mark: competency.pass_mark,
+      active: competency.active,
+      amber_threshold: v.amber_threshold,
+      validity_months: v.validity_months,
+      reassessment_wait_days: v.reassessment_wait_days,
+      requires_result_approval: v.requires_result_approval,
+    });
+    setSaving(null);
+    if (!result.ok) {
+      toast.error(result.error ?? 'Failed to update HSE settings');
+      return;
+    }
+    toast.success(`${competency.code} HSE settings updated`);
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>HSE Competency Settings</CardTitle>
+        <CardDescription>
+          RAG banding, certificate validity, and the result-approval workflow — configurable per HSE competency.
+          Technical competencies (LOA/SFT/PTW) are unaffected and never show this section.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {competencies.map((c) => {
+          const v = values[c.id]!;
+          return (
+            <div key={c.id} className="space-y-3 rounded-xl border border-slate-200 p-3">
+              <CompetencyBadge code={c.code} name={`${c.code} — ${c.competency_name}`} />
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+                <FormField label="Amber Threshold (%)" htmlFor={`amber_${c.id}`} hint="Below pass mark, above this = Amber.">
+                  <Input
+                    id={`amber_${c.id}`}
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.01}
+                    value={v.amber_threshold ?? ''}
+                    onChange={(e) => setField(c.id, 'amber_threshold', e.target.value === '' ? null : Number(e.target.value))}
+                  />
+                </FormField>
+                <FormField label="Certificate Validity (months)" htmlFor={`validity_${c.id}`} hint="Blank = never expires.">
+                  <Input
+                    id={`validity_${c.id}`}
+                    type="number"
+                    min={1}
+                    value={v.validity_months ?? ''}
+                    onChange={(e) => setField(c.id, 'validity_months', e.target.value === '' ? null : Number(e.target.value))}
+                  />
+                </FormField>
+                <FormField label="Reassessment Wait (days)" htmlFor={`wait_${c.id}`}>
+                  <Input
+                    id={`wait_${c.id}`}
+                    type="number"
+                    min={0}
+                    value={v.reassessment_wait_days}
+                    onChange={(e) => setField(c.id, 'reassessment_wait_days', Number(e.target.value))}
+                  />
+                </FormField>
+                <FormField label="Result Approval" htmlFor={`approval_${c.id}`}>
+                  <label className="flex h-10 items-center gap-2 text-sm text-slate-600">
+                    <input
+                      id={`approval_${c.id}`}
+                      type="checkbox"
+                      checked={v.requires_result_approval}
+                      onChange={(e) => setField(c.id, 'requires_result_approval', e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300"
+                    />
+                    Requires manual approval
+                  </label>
+                </FormField>
+              </div>
+              <div className="flex justify-end">
+                <Button variant="outline" size="sm" disabled={saving === c.id} onClick={() => handleSave(c)}>
+                  {saving === c.id ? 'Saving…' : 'Save'}
+                </Button>
+              </div>
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** CRUD for competency_areas -- the sub-topics used to tag HSE questions
+ * and break assessment scores down by area (e.g. HSE Advisor's ~34
+ * areas). Only ever rendered for HSE-stream competencies. */
+function CompetencyAreasManager({
+  competencies,
+  initialAreas,
+}: {
+  competencies: Competency[];
+  initialAreas: CompetencyArea[];
+}) {
+  const [areas, setAreas] = React.useState(initialAreas);
+  const [drafts, setDrafts] = React.useState<Record<string, { code: string; area_name: string; sort_order: string }>>(
+    Object.fromEntries(competencies.map((c) => [c.id, { code: '', area_name: '', sort_order: '0' }]))
+  );
+  const [editing, setEditing] = React.useState<Record<string, { code: string; area_name: string; sort_order: string }>>({});
+  const [busyId, setBusyId] = React.useState<string | null>(null);
+
+  function areasFor(competencyId: string) {
+    return areas.filter((a) => a.competency_id === competencyId).sort((a, b) => a.sort_order - b.sort_order || a.code.localeCompare(b.code));
+  }
+
+  async function handleAdd(competency: Competency) {
+    const draft = drafts[competency.id]!;
+    if (!draft.code.trim() || !draft.area_name.trim()) {
+      toast.error('Code and area name are required');
+      return;
+    }
+    setBusyId(`add_${competency.id}`);
+    const result = await createCompetencyArea({
+      competency_id: competency.id,
+      code: draft.code.trim(),
+      area_name: draft.area_name.trim(),
+      sort_order: Number(draft.sort_order) || 0,
+      active: true,
+    });
+    setBusyId(null);
+    if (!result.ok) {
+      toast.error(result.error ?? Object.values(result.fieldErrors ?? {})[0] ?? 'Failed to add area');
+      return;
+    }
+    toast.success('Area added');
+    setDrafts((prev) => ({ ...prev, [competency.id]: { code: '', area_name: '', sort_order: '0' } }));
+    // Server action already revalidates the page; refetch by reloading isn't
+    // ideal for a form, so optimistically add a placeholder row using what
+    // we know -- the next full page load will have the real id-consistent data.
+    setAreas((prev) => [
+      ...prev,
+      {
+        id: `pending-${Date.now()}`,
+        competency_id: competency.id,
+        code: draft.code.trim(),
+        area_name: draft.area_name.trim(),
+        sort_order: Number(draft.sort_order) || 0,
+        active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ]);
+  }
+
+  function startEdit(area: CompetencyArea) {
+    setEditing((prev) => ({
+      ...prev,
+      [area.id]: { code: area.code, area_name: area.area_name, sort_order: String(area.sort_order) },
+    }));
+  }
+
+  async function handleSaveEdit(area: CompetencyArea) {
+    const draft = editing[area.id];
+    if (!draft) return;
+    setBusyId(area.id);
+    const result = await updateCompetencyArea(area.id, {
+      competency_id: area.competency_id,
+      code: draft.code.trim(),
+      area_name: draft.area_name.trim(),
+      sort_order: Number(draft.sort_order) || 0,
+      active: area.active,
+    });
+    setBusyId(null);
+    if (!result.ok) {
+      toast.error(result.error ?? Object.values(result.fieldErrors ?? {})[0] ?? 'Failed to update area');
+      return;
+    }
+    toast.success('Area updated');
+    setAreas((prev) =>
+      prev.map((a) => (a.id === area.id ? { ...a, code: draft.code.trim(), area_name: draft.area_name.trim(), sort_order: Number(draft.sort_order) || 0 } : a))
+    );
+    setEditing((prev) => {
+      const next = { ...prev };
+      delete next[area.id];
+      return next;
+    });
+  }
+
+  async function handleToggleActive(area: CompetencyArea) {
+    setBusyId(area.id);
+    const result = await setCompetencyAreaActive(area.id, !area.active);
+    setBusyId(null);
+    if (!result.ok) {
+      toast.error(result.error ?? 'Failed to update area');
+      return;
+    }
+    setAreas((prev) => prev.map((a) => (a.id === area.id ? { ...a, active: !a.active } : a)));
+  }
+
+  async function handleDelete(area: CompetencyArea) {
+    setBusyId(area.id);
+    const result = await deleteCompetencyArea(area.id);
+    setBusyId(null);
+    if (!result.ok) {
+      toast.error(result.error ?? 'Failed to delete area');
+      return;
+    }
+    toast.success('Area deleted');
+    setAreas((prev) => prev.filter((a) => a.id !== area.id));
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Competency Areas</CardTitle>
+        <CardDescription>
+          Sub-topics used to tag HSE questions and break assessment scores down by area. Deactivate an area instead
+          of deleting it once questions reference it.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {competencies.map((c) => {
+          const rows = areasFor(c.id);
+          const draft = drafts[c.id]!;
+          return (
+            <div key={c.id} className="space-y-3">
+              <CompetencyBadge code={c.code} name={`${c.code} — ${c.competency_name}`} />
+              {rows.length > 0 && (
+                <Table>
+                  <Thead>
+                    <Tr>
+                      <Th>Code</Th>
+                      <Th>Area Name</Th>
+                      <Th>Order</Th>
+                      <Th>Status</Th>
+                      <Th />
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {rows.map((a) => {
+                      const isEditing = !!editing[a.id];
+                      const edit = editing[a.id];
+                      return (
+                        <Tr key={a.id}>
+                          {isEditing && edit ? (
+                            <>
+                              <Td>
+                                <Input
+                                  className="w-24"
+                                  value={edit.code}
+                                  onChange={(e) => setEditing((prev) => ({ ...prev, [a.id]: { ...edit, code: e.target.value } }))}
+                                />
+                              </Td>
+                              <Td>
+                                <Input
+                                  value={edit.area_name}
+                                  onChange={(e) => setEditing((prev) => ({ ...prev, [a.id]: { ...edit, area_name: e.target.value } }))}
+                                />
+                              </Td>
+                              <Td>
+                                <Input
+                                  className="w-20"
+                                  type="number"
+                                  value={edit.sort_order}
+                                  onChange={(e) => setEditing((prev) => ({ ...prev, [a.id]: { ...edit, sort_order: e.target.value } }))}
+                                />
+                              </Td>
+                              <Td />
+                              <Td>
+                                <div className="flex gap-1">
+                                  <Button size="sm" disabled={busyId === a.id} onClick={() => handleSaveEdit(a)}>
+                                    Save
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() =>
+                                      setEditing((prev) => {
+                                        const next = { ...prev };
+                                        delete next[a.id];
+                                        return next;
+                                      })
+                                    }
+                                  >
+                                    Cancel
+                                  </Button>
+                                </div>
+                              </Td>
+                            </>
+                          ) : (
+                            <>
+                              <Td className="font-medium text-slate-700">{a.code}</Td>
+                              <Td>{a.area_name}</Td>
+                              <Td className="text-slate-500">{a.sort_order}</Td>
+                              <Td>
+                                <span className={a.active ? 'text-emerald-700' : 'text-slate-400'}>
+                                  {a.active ? 'Active' : 'Inactive'}
+                                </span>
+                              </Td>
+                              <Td>
+                                <div className="flex items-center gap-1">
+                                  <Button variant="ghost" size="sm" onClick={() => startEdit(a)}>
+                                    Edit
+                                  </Button>
+                                  <Button variant="ghost" size="sm" disabled={busyId === a.id} onClick={() => handleToggleActive(a)}>
+                                    {a.active ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                                  </Button>
+                                  <Button variant="ghost" size="sm" disabled={busyId === a.id} onClick={() => handleDelete(a)}>
+                                    <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                                  </Button>
+                                </div>
+                              </Td>
+                            </>
+                          )}
+                        </Tr>
+                      );
+                    })}
+                  </Tbody>
+                </Table>
+              )}
+              <div className="flex flex-col gap-2 rounded-xl border border-dashed border-slate-200 p-3 sm:flex-row sm:items-end">
+                <div className="w-28">
+                  <FormField label="Code" htmlFor={`new_code_${c.id}`}>
+                    <Input
+                      id={`new_code_${c.id}`}
+                      value={draft.code}
+                      onChange={(e) => setDrafts((prev) => ({ ...prev, [c.id]: { ...draft, code: e.target.value } }))}
+                      placeholder="e.g. A01"
+                    />
+                  </FormField>
+                </div>
+                <div className="flex-1">
+                  <FormField label="Area Name" htmlFor={`new_name_${c.id}`}>
+                    <Input
+                      id={`new_name_${c.id}`}
+                      value={draft.area_name}
+                      onChange={(e) => setDrafts((prev) => ({ ...prev, [c.id]: { ...draft, area_name: e.target.value } }))}
+                      placeholder="e.g. Risk Assessment"
+                    />
+                  </FormField>
+                </div>
+                <div className="w-20">
+                  <FormField label="Order" htmlFor={`new_order_${c.id}`}>
+                    <Input
+                      id={`new_order_${c.id}`}
+                      type="number"
+                      value={draft.sort_order}
+                      onChange={(e) => setDrafts((prev) => ({ ...prev, [c.id]: { ...draft, sort_order: e.target.value } }))}
+                    />
+                  </FormField>
+                </div>
+                <Button size="sm" disabled={busyId === `add_${c.id}`} onClick={() => handleAdd(c)}>
+                  <Plus className="h-3.5 w-3.5" /> Add Area
+                </Button>
+              </div>
+            </div>
+          );
+        })}
       </CardContent>
     </Card>
   );

@@ -1,13 +1,17 @@
 import { PageHeader } from '@/components/ui/page-header';
 import { SettingsForm } from '@/components/settings/settings-form';
 import { getAllSettings } from '@/lib/actions/settings';
-import { getCompetencies } from '@/lib/actions/taxonomy';
+import { getCompetencies, getCompetencyAreas } from '@/lib/actions/taxonomy';
 import { requireAdmin } from '@/lib/auth/session';
 import type { SystemSettingBranding } from '@/types/database';
 
 export default async function SettingsPage() {
   await requireAdmin();
-  const [settings, competencies] = await Promise.all([getAllSettings(), getCompetencies()]);
+  const [settings, competencies, competencyAreas] = await Promise.all([
+    getAllSettings(),
+    getCompetencies(),
+    getCompetencyAreas(),
+  ]);
 
   return (
     <div>
@@ -31,6 +35,7 @@ export default async function SettingsPage() {
           }
         }
         competencies={competencies}
+        competencyAreas={competencyAreas}
       />
     </div>
   );

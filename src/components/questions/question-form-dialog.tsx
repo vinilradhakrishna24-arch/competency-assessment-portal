@@ -19,6 +19,7 @@ export interface QuestionFormOption {
 export interface EditableQuestion {
   id: string;
   competency_id: string;
+  competency_area_id: string | null;
   question_set_id: string | null;
   question_type: 'single' | 'multiple' | 'true_false';
   question_text: string;
@@ -36,6 +37,7 @@ const KEYS = ['A', 'B', 'C', 'D', 'E', 'F'];
 function emptyForm(competencyId: string): QuestionInput {
   return {
     competency_id: competencyId,
+    competency_area_id: null,
     question_set_id: null,
     question_type: 'single',
     question_text: '',
@@ -57,6 +59,7 @@ export function QuestionFormDialog({
   onOpenChange,
   competencies,
   questionSets,
+  competencyAreas = [],
   question,
   onSaved,
 }: {
@@ -64,6 +67,7 @@ export function QuestionFormDialog({
   onOpenChange: (open: boolean) => void;
   competencies: { id: string; code: string; competency_name: string }[];
   questionSets: { id: string; competency_id: string; set_name: string }[];
+  competencyAreas?: { id: string; competency_id: string; code: string; area_name: string }[];
   question?: EditableQuestion | null;
   onSaved: () => void;
 }) {
@@ -78,6 +82,7 @@ export function QuestionFormDialog({
     if (question) {
       setForm({
         competency_id: question.competency_id,
+        competency_area_id: question.competency_area_id,
         question_set_id: question.question_set_id,
         question_type: question.question_type,
         question_text: question.question_text,
@@ -97,6 +102,7 @@ export function QuestionFormDialog({
   }, [open, question, competencies]);
 
   const availableSets = questionSets.filter((s) => s.competency_id === form.competency_id);
+  const availableAreas = competencyAreas.filter((a) => a.competency_id === form.competency_id);
 
   function setField<K extends keyof QuestionInput>(key: K, value: QuestionInput[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -226,6 +232,22 @@ export function QuestionFormDialog({
               ))}
             </Select>
           </FormField>
+          {availableAreas.length > 0 && (
+            <FormField label="Competency Area" htmlFor="competency_area_id" hint="Used to break assessment scores down by area.">
+              <Select
+                id="competency_area_id"
+                value={form.competency_area_id ?? ''}
+                onChange={(e) => setField('competency_area_id', e.target.value || null)}
+              >
+                <option value="">Unassigned</option>
+                {availableAreas.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.code} — {a.area_name}
+                  </option>
+                ))}
+              </Select>
+            </FormField>
+          )}
           <FormField label="Question Type" htmlFor="question_type" required>
             <Select
               id="question_type"

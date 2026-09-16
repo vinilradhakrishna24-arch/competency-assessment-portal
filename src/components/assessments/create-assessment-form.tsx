@@ -39,6 +39,13 @@ export function CreateAssessmentForm({
   tokenExpiryHours: number;
   defaultRandomizeOptions: boolean;
 }) {
+  // Only offer competencies that are actually ready for real candidates.
+  // An HSE competency stays `active: false` while its question bank and
+  // competency areas are still being built out (see migration 0014 /
+  // Settings > Competency Areas) — it must not be assignable here until
+  // an admin flips it on.
+  const activeCompetencies = React.useMemo(() => competencies.filter((c) => c.active), [competencies]);
+
   const [candidateMode, setCandidateMode] = React.useState<'existing' | 'new'>('existing');
   const [candidateSearch, setCandidateSearch] = React.useState('');
   const [candidateResults, setCandidateResults] = React.useState<Candidate[]>(initialCandidates);
@@ -53,7 +60,7 @@ export function CreateAssessmentForm({
     department: '',
   });
 
-  const [competencyId, setCompetencyId] = React.useState(competencies[0]?.id ?? '');
+  const [competencyId, setCompetencyId] = React.useState(activeCompetencies[0]?.id ?? '');
   const [questionSource, setQuestionSource] = React.useState<'specific_set' | 'random'>('specific_set');
   const [questionSetId, setQuestionSetId] = React.useState('');
   const [numQuestions, setNumQuestions] = React.useState(20);
@@ -331,7 +338,7 @@ export function CreateAssessmentForm({
             <div>
               <p className="mb-2 text-sm font-medium text-slate-700">Competency</p>
               <div className="flex flex-wrap gap-2">
-                {competencies.map((c) => (
+                {activeCompetencies.map((c) => (
                   <button
                     type="button"
                     key={c.id}

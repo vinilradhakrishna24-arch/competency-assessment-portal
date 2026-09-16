@@ -8,6 +8,7 @@ export interface ValidatedImportRow {
   preview: {
     competency_code: string;
     question_set_name: string;
+    competency_area_name: string;
     question_type: string;
     question_text: string;
     marks: number;
@@ -17,6 +18,7 @@ export interface ValidatedImportRow {
   /** Populated only when errors is empty — ready to send to the confirm step. */
   insert: null | {
     competency_id: string;
+    competency_area_id: string | null;
     question_set_id: string | null;
     question_type: ImportQuestionType;
     question_text: string;
@@ -68,7 +70,8 @@ export function validateImportRows(
   rawRows: RawImportRow[],
   competencies: { id: string; code: string }[],
   questionSets: { id: string; competency_id: string; set_name: string }[],
-  existingQuestionKeys: Set<string>
+  existingQuestionKeys: Set<string>,
+  competencyAreas: { id: string; competency_id: string; code: string; area_name: string }[] = []
 ): ValidatedImportRow[] {
   const competencyByCode = new Map(competencies.map((c) => [c.code.trim().toLowerCase(), c]));
   const seenInFile = new Map<string, number>();
@@ -79,6 +82,7 @@ export function validateImportRows(
 
     const competencyCodeRaw = getField(v, 'competencycode', 'competency', 'code');
     const questionSetName = getField(v, 'questionset', 'set', 'questionsetname');
+    const competencyAreaRaw = getField(v, 'competencyarea', 'area', 'competencyareacode', 'areacode');
     const questionTypeRaw = getField(v, 'questiontype', 'type');
     const questionText = getField(v, 'questiontext', 'question');
     const scenarioText = getField(v, 'scenariotext', 'scenario');
@@ -109,6 +113,23 @@ export function validateImportRows(
         errors.push(`Invalid question set "${questionSetName}" for competency ${competencyCodeRaw}`);
       } else {
         questionSetId = match.id;
+      }
+    }
+
+    // --- Competency area (optional, HSE only) -----------------------------
+    let competencyAreaId: string | null = null;
+    let competencyAreaName = '';
+    if (competencyAreaRaw && competency) {
+      const match = competencyAreas.find(
+        (a) =>
+          a.competency_id === competency!.id &&
+          a.code.trim().toLowerCase() === competencyAreaRaw.trim().toLowerCase()
+      );
+      if (!match) {
+        errors.push(`Invalid competency area "${competencyAreaRaw}" for competency ${competencyCodeRaw}`);
+      } else {
+        competencyAreaId = match.id;
+        competencyAreaName = match.area_name;
       }
     }
 
@@ -219,6 +240,7 @@ export function validateImportRows(
       errors.length === 0 && competency && questionType
         ? {
             competency_id: competency.id,
+            competency_area_id: competencyAreaId,
             question_set_id: questionSetId,
             question_type: questionType,
             question_text: questionText.trim(),
@@ -241,6 +263,7 @@ export function validateImportRows(
       preview: {
         competency_code: competencyCodeRaw || '—',
         question_set_name: questionSetName || '—',
+        competency_area_name: competencyAreaName || (competencyAreaRaw ? competencyAreaRaw : '—'),
         question_type: questionType ?? (questionTypeRaw || '—'),
         question_text: questionText || '—',
         marks,

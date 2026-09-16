@@ -14,10 +14,10 @@ import type { ValidatedImportRow } from '@/lib/import/validate-rows';
 type Step = 'upload' | 'preview' | 'done';
 
 const TEMPLATE_CSV = [
-  'Competency Code,Question Set,Question Type,Question Text,Scenario Text,Option A,Option B,Option C,Option D,Correct Answer,Marks,Difficulty,Explanation (Admin Only),Active',
-  'LOA,Set A,single,"What is the minimum safe approach distance for a LOA activity?",,"1 metre","3 metres","5 metres","10 metres",B,1,medium,"Per site safety code section 4.2",TRUE',
-  'SFT,Set A,multiple,"Which of the following are required before starting scaffold work? (select all that apply)",,"Valid permit","Inspection tag","Verbal approval only","Toolbox talk completed",A;B;D,2,medium,,TRUE',
-  'PTW,Set B,true_false,"A hot work permit is valid for more than one shift unless explicitly extended.",,,,,,False,1,easy,,TRUE',
+  'Competency Code,Competency Area,Question Set,Question Type,Question Text,Scenario Text,Option A,Option B,Option C,Option D,Correct Answer,Marks,Difficulty,Explanation (Admin Only),Active',
+  'LOA,,Set A,single,"What is the minimum safe approach distance for a LOA activity?",,"1 metre","3 metres","5 metres","10 metres",B,1,medium,"Per site safety code section 4.2",TRUE',
+  'SFT,,Set A,multiple,"Which of the following are required before starting scaffold work? (select all that apply)",,"Valid permit","Inspection tag","Verbal approval only","Toolbox talk completed",A;B;D,2,medium,,TRUE',
+  'PTW,,Set B,true_false,"A hot work permit is valid for more than one shift unless explicitly extended.",,,,,,False,1,easy,,TRUE',
 ].join('\n');
 
 function downloadTemplate() {
@@ -119,7 +119,8 @@ export function ImportWizard() {
 
         <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3">
           <div className="text-sm text-slate-600">
-            Not sure of the format? Download a starter template with sample rows for each question type.
+            Not sure of the format? Download a starter template with sample rows for each question type. The
+            &quot;Competency Area&quot; column is optional — leave it blank unless you&apos;re tagging an HSE question to one of that competency&apos;s configured areas.
           </div>
           <Button variant="outline" size="sm" onClick={downloadTemplate}>
             <Download className="h-3.5 w-3.5" /> Download Template
@@ -158,6 +159,7 @@ export function ImportWizard() {
             <Tr>
               <Th>Row</Th>
               <Th>Competency</Th>
+              <Th>Area</Th>
               <Th>Set</Th>
               <Th>Type</Th>
               <Th>Question</Th>
@@ -171,6 +173,7 @@ export function ImportWizard() {
               <Tr key={row.rowNumber}>
                 <Td className="text-slate-400">{row.rowNumber}</Td>
                 <Td>{row.preview.competency_code}</Td>
+                <Td className="text-slate-500">{row.preview.competency_area_name}</Td>
                 <Td className="text-slate-500">{row.preview.question_set_name}</Td>
                 <Td className="text-slate-500">{row.preview.question_type}</Td>
                 <Td className="max-w-xs truncate" title={row.preview.question_text}>

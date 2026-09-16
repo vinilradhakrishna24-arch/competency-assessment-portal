@@ -21,6 +21,9 @@ export const questionOptionSchema = z.object({
 export const questionSchema = z
   .object({
     competency_id: z.string().uuid('Select a competency'),
+    // HSE only -- tags the question to one of that competency's areas for
+    // RAG score breakdown. Always null/omitted for technical questions.
+    competency_area_id: z.string().uuid().optional().nullable(),
     question_set_id: z.string().uuid().optional().nullable(),
     question_type: z.enum(['single', 'multiple', 'true_false']),
     question_text: z.string().trim().min(1, 'Question text is required').max(4000),
@@ -124,6 +127,22 @@ export const competencySchema = z.object({
   competency_name: z.string().trim().min(1).max(200),
   description: z.string().trim().max(1000).optional().or(z.literal('')),
   pass_mark: z.coerce.number().min(1).max(100),
+  active: z.boolean().default(true),
+  // HSE-only fields below. All optional: when omitted (e.g. the existing
+  // technical Pass Marks card, which only ever sends the fields above),
+  // updateCompetency() leaves the corresponding column untouched rather
+  // than resetting it to a default.
+  amber_threshold: z.coerce.number().min(0).max(100).optional().nullable(),
+  validity_months: z.coerce.number().int().positive().optional().nullable(),
+  reassessment_wait_days: z.coerce.number().int().min(0).optional(),
+  requires_result_approval: z.boolean().optional(),
+});
+
+export const competencyAreaSchema = z.object({
+  competency_id: z.string().uuid('Select a competency'),
+  code: z.string().trim().min(1, 'Code is required').max(20),
+  area_name: z.string().trim().min(1, 'Area name is required').max(200),
+  sort_order: z.coerce.number().int().min(0).default(0),
   active: z.boolean().default(true),
 });
 

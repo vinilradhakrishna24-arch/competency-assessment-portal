@@ -95,6 +95,7 @@ export async function createQuestion(input: QuestionInput): Promise<ActionResult
     .from('questions')
     .insert({
       competency_id: parsed.data.competency_id,
+      competency_area_id: parsed.data.competency_area_id || null,
       question_set_id: parsed.data.question_set_id || null,
       question_type: parsed.data.question_type,
       question_text: parsed.data.question_text,
@@ -152,6 +153,7 @@ export async function updateQuestion(id: string, input: QuestionInput): Promise<
     .from('questions')
     .update({
       competency_id: parsed.data.competency_id,
+      competency_area_id: parsed.data.competency_area_id || null,
       question_set_id: parsed.data.question_set_id || null,
       question_type: parsed.data.question_type,
       question_text: parsed.data.question_text,
@@ -243,6 +245,7 @@ export async function deleteQuestion(id: string): Promise<ActionResult> {
 
 export async function getQuestions(filters?: {
   competencyId?: string;
+  competencyAreaId?: string;
   questionSetId?: string;
   activeOnly?: boolean;
   search?: string;
@@ -251,10 +254,13 @@ export async function getQuestions(filters?: {
   const supabase = await createSupabaseServerClient();
   let query = supabase
     .from('questions')
-    .select('*, question_options(*), competencies(code, competency_name), question_sets(set_name)')
+    .select(
+      '*, question_options(*), competencies(code, competency_name), question_sets(set_name), competency_areas(code, area_name)'
+    )
     .order('created_at', { ascending: false });
 
   if (filters?.competencyId) query = query.eq('competency_id', filters.competencyId);
+  if (filters?.competencyAreaId) query = query.eq('competency_area_id', filters.competencyAreaId);
   if (filters?.questionSetId) query = query.eq('question_set_id', filters.questionSetId);
   if (filters?.activeOnly) query = query.eq('active', true);
   if (filters?.search) query = query.ilike('question_text', `%${filters.search}%`);

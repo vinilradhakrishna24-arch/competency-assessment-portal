@@ -20,6 +20,7 @@ import type { RoleName } from '@/types/database';
 interface QuestionRow {
   id: string;
   competency_id: string;
+  competency_area_id: string | null;
   question_set_id: string | null;
   question_type: 'single' | 'multiple' | 'true_false';
   question_text: string;
@@ -31,6 +32,7 @@ interface QuestionRow {
   image_url: string | null;
   competencies: { code: string; competency_name: string } | null;
   question_sets: { set_name: string } | null;
+  competency_areas: { code: string; area_name: string } | null;
   question_options: { id: string; option_key: string; option_text: string; is_correct: boolean; sort_order: number }[];
 }
 
@@ -38,6 +40,7 @@ export function QuestionsManager({
   initialQuestions,
   competencies,
   questionSets,
+  competencyAreas = [],
   role,
 }: {
   initialQuestions: QuestionRow[];
@@ -49,6 +52,7 @@ export function QuestionsManager({
     active: boolean;
     competencies: { code: string; competency_name: string } | null;
   }[];
+  competencyAreas?: { id: string; competency_id: string; code: string; area_name: string }[];
   role: RoleName;
 }) {
   const [questions, setQuestions] = React.useState(initialQuestions);
@@ -133,6 +137,7 @@ export function QuestionsManager({
           <Thead>
             <Tr>
               <Th>Competency</Th>
+              <Th>Area</Th>
               <Th>Set</Th>
               <Th>Type</Th>
               <Th>Question</Th>
@@ -146,6 +151,7 @@ export function QuestionsManager({
             {questions.map((q) => (
               <Tr key={q.id}>
                 <Td>{q.competencies && <CompetencyBadge code={q.competencies.code} />}</Td>
+                <Td className="text-slate-500">{q.competency_areas?.area_name ?? '—'}</Td>
                 <Td className="text-slate-500">{q.question_sets?.set_name ?? '—'}</Td>
                 <Td className="text-slate-500">{QUESTION_TYPE_LABELS[q.question_type]}</Td>
                 <Td className="max-w-sm" title={q.question_text}>
@@ -176,6 +182,7 @@ export function QuestionsManager({
                           setEditing({
                             id: q.id,
                             competency_id: q.competency_id,
+                            competency_area_id: q.competency_area_id,
                             question_set_id: q.question_set_id,
                             question_type: q.question_type,
                             question_text: q.question_text,
@@ -222,6 +229,7 @@ export function QuestionsManager({
         onOpenChange={setFormOpen}
         competencies={competencies}
         questionSets={questionSets}
+        competencyAreas={competencyAreas}
         question={editing}
         onSaved={refresh}
       />
