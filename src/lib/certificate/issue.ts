@@ -26,7 +26,11 @@ export async function issueCertificateForAssessment(assessmentId: string): Promi
     .eq('id', assessmentId)
     .single();
 
-  if (assessmentError || !assessment || assessment.status !== 'PASSED') return null;
+  // A HSE competency with requires_result_approval routes a passing score
+  // to AWAITING_APPROVAL -> CERTIFIED (see fn_approve_result) instead of
+  // PASSED. Technical assessments never reach CERTIFIED, so this is a
+  // pure widening of what was previously PASSED-only.
+  if (assessmentError || !assessment || !['PASSED', 'CERTIFIED'].includes(assessment.status)) return null;
 
   const competency = assessment.competencies as { code: string; competency_name: string };
   const candidate = assessment.candidates as {

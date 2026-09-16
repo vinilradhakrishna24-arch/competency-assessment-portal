@@ -16,6 +16,8 @@ export const ASSESSMENT_STATUSES: AssessmentStatus[] = [
   'FAILED',
   'EXPIRED',
   'CANCELLED',
+  'AWAITING_APPROVAL',
+  'CERTIFIED',
 ];
 
 export const STATUS_LABELS: Record<AssessmentStatus, string> = {
@@ -27,6 +29,10 @@ export const STATUS_LABELS: Record<AssessmentStatus, string> = {
   FAILED: 'Failed',
   EXPIRED: 'Expired',
   CANCELLED: 'Cancelled',
+  // HSE result-approval workflow only (competencies.requires_result_approval)
+  // -- no technical (LOA/SFT/PTW) assessment can reach these today.
+  AWAITING_APPROVAL: 'Awaiting Approval',
+  CERTIFIED: 'Certified',
 };
 
 export const STATUS_BADGE_CLASSES: Record<AssessmentStatus, string> = {
@@ -38,6 +44,8 @@ export const STATUS_BADGE_CLASSES: Record<AssessmentStatus, string> = {
   FAILED: 'bg-rose-50 text-rose-700 border-rose-200',
   EXPIRED: 'bg-orange-50 text-orange-700 border-orange-200',
   CANCELLED: 'bg-gray-100 text-gray-500 border-gray-200',
+  AWAITING_APPROVAL: 'bg-amber-50 text-amber-700 border-amber-200',
+  CERTIFIED: 'bg-emerald-50 text-emerald-700 border-emerald-200',
 };
 
 export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
@@ -97,6 +105,8 @@ export const AUDIT_ACTIONS = {
   EXAM_PASSED: 'exam.passed',
   EXAM_FAILED: 'exam.failed',
   REASSESSMENT_AUTHORIZED: 'reassessment.authorized',
+  RESULT_APPROVED: 'result.approved',
+  RESULT_REJECTED: 'result.rejected',
   CERTIFICATE_GENERATED: 'certificate.generated',
   CERTIFICATE_DOWNLOADED: 'certificate.downloaded',
   USER_ROLE_CHANGED: 'user.role_changed',

@@ -304,9 +304,20 @@ export async function authorizeReassessment(
   });
 
   if (rpcError || !result || (result as { error?: string }).error) {
+    const errCode = (result as { error?: string })?.error;
+    if (errCode === 'reassessment_wait_period') {
+      const eligibleAt = (result as { eligible_at?: string }).eligible_at;
+      const waitDays = (result as { wait_days?: number }).wait_days;
+      return {
+        ok: false,
+        error: eligibleAt
+          ? `Reassessment is not yet permitted for this competency (${waitDays}-day waiting period). Eligible from ${new Date(eligibleAt).toLocaleString()}.`
+          : 'Reassessment is not yet permitted for this competency (waiting period has not elapsed).',
+      };
+    }
     return {
       ok: false,
-      error: rpcError?.message ?? (result as { error?: string })?.error ?? 'Failed to authorize reassessment',
+      error: rpcError?.message ?? errCode ?? 'Failed to authorize reassessment',
     };
   }
 

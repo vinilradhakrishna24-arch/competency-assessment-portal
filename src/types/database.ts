@@ -1,7 +1,14 @@
 // Hand-maintained types mirroring the Postgres schema in supabase/migrations.
 // Keep this in sync whenever a migration changes table shape.
 
+// RoleName stays 'admin' | 'viewer' for now -- that is still what
+// authorization actually keys off (roles.permission_level, see migration
+// 0012). A role's *display name* (roles.name) can now be any unique
+// string (e.g. "HSE Manager") without widening this union; role-specific
+// UI (nav sections, stream-scoped gating) is added in a later phase.
 export type RoleName = 'admin' | 'viewer';
+
+export type CompetencyStream = 'technical' | 'hse';
 
 export type AssessmentStatus =
   | 'DRAFT'
@@ -11,16 +18,25 @@ export type AssessmentStatus =
   | 'PASSED'
   | 'FAILED'
   | 'EXPIRED'
-  | 'CANCELLED';
+  | 'CANCELLED'
+  | 'AWAITING_APPROVAL'
+  | 'CERTIFIED';
 
 export type QuestionType = 'single' | 'multiple' | 'true_false';
 export type QuestionSource = 'specific_set' | 'random';
 export type Difficulty = 'easy' | 'medium' | 'hard';
 export type ActorType = 'admin' | 'viewer' | 'candidate' | 'system';
+export type ScoreBand = 'green' | 'amber' | 'red';
 
 export interface Role {
   id: string;
-  name: RoleName;
+  name: string;
+  /** The actual authorization key -- see migration 0012. */
+  permission_level: RoleName;
+  /** NULL = unrestricted (every competency stream). A non-null array
+   * restricts a viewer-level role to only those streams (e.g. HSE
+   * Manager -> ['hse']). */
+  stream_scope: CompetencyStream[] | null;
   description: string | null;
   created_at: string;
 }
@@ -45,6 +61,8 @@ export interface Candidate {
   mobile: string | null;
   project_contract: string | null;
   department: string | null;
+  /** Requested field, applies to both streams. Migration 0011. */
+  location: string | null;
   active_status: boolean;
   deleted_at: string | null;
   created_by: string | null;
@@ -58,6 +76,33 @@ export interface Competency {
   competency_name: string;
   description: string | null;
   pass_mark: number;
+  active: boolean;
+  /** 'technical' (LOA/SFT/PTW, existing) or 'hse' (new) -- migration 0011. */
+  stream: CompetencyStream;
+  /** HSE only. score >= pass_mark => green, amber_threshold <= score < pass_mark
+   * => amber, score < amber_threshold => red. Null disables RAG banding. */
+  amber_threshold: number | null;
+  /** HSE only. certificates.valid_until = issued_at + validity_months.
+   * Null means certificates never expire (current technical behavior). */
+  validity_months: number | null;
+  /** Minimum days after a FAILED attempt before reassessment. 0 = no wait
+   * (current technical behavior). */
+  reassessment_wait_days: number;
+  /** When true, a passing score routes to AWAITING_APPROVAL instead of
+   * auto-issuing a certificate. False = current technical behavior. */
+  requires_result_approval: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** A sub-topic within a competency (e.g. one of HSE Advisor's ~34 areas),
+ * used to tag questions and break assessment scores down. Migration 0011. */
+export interface CompetencyArea {
+  id: string;
+  competency_id: string;
+  code: string;
+  area_name: string;
+  sort_order: number;
   active: boolean;
   created_at: string;
   updated_at: string;
@@ -75,6 +120,9 @@ export interface QuestionSet {
 export interface Question {
   id: string;
   competency_id: string;
+  /** HSE only -- tags this question to one competency_areas row. Null for
+   * every technical question. */
+  competency_area_id: string | null;
   question_set_id: string | null;
   question_type: QuestionType;
   question_text: string;
@@ -161,6 +209,22 @@ export interface AssessmentQuestion {
   option_order_snapshot: CandidateOption[];
   correct_option_ids: string[]; // server-only — never sent to the candidate browser
   image_url_snapshot: string | null;
+  /** Frozen copy of the question's competency_area_id at exam-generation
+   * time. Null for every technical question. */
+  competency_area_id_snapshot: string | null;
+}
+
+/** Per-competency-area RAG score breakdown for one assessment attempt.
+ * Only written when the competency has amber_threshold set (HSE).
+ * Migration 0011/0013. */
+export interface AssessmentAreaScore {
+  id: string;
+  assessment_id: string;
+  competency_area_id: string;
+  earned_marks: number;
+  available_marks: number;
+  score_percentage: number;
+  band: ScoreBand;
 }
 
 export interface Answer {
@@ -192,9 +256,23 @@ export interface Certificate {
   storage_path: string | null;
   score_percentage: number;
   issued_at: string;
+  /** HSE only -- issued_at + competencies.validity_months. Null means this
+   * certificate never expires (current technical behavior). */
+  valid_until: string | null;
   revoked: boolean;
   revoked_at: string | null;
   revoked_reason: string | null;
+}
+
+/** Audit trail for the manual approve/reject decision on an
+ * AWAITING_APPROVAL assessment. Migration 0011/0013. */
+export interface ResultApproval {
+  id: string;
+  assessment_id: string;
+  decision: 'approved' | 'rejected';
+  decided_by: string | null;
+  decided_at: string;
+  comment: string | null;
 }
 
 export interface AuditLog {
