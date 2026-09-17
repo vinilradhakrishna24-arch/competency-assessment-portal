@@ -27,6 +27,7 @@ function toDatetimeLocalValue(date: Date): string {
 export function CreateAssessmentForm({
   competencies,
   questionSets,
+  questionCounts,
   initialCandidates,
   defaultPassMark,
   tokenExpiryHours,
@@ -34,6 +35,11 @@ export function CreateAssessmentForm({
 }: {
   competencies: Competency[];
   questionSets: QuestionSetOption[];
+  /** Active-question count per competency_id (see getActiveQuestionCounts).
+   * Purely a readiness signal for the examiner -- never used to filter which
+   * competencies are selectable, so a brand-new competency with zero
+   * questions still shows up (as "0 questions") rather than disappearing. */
+  questionCounts: Record<string, number>;
   initialCandidates: Candidate[];
   defaultPassMark: number;
   tokenExpiryHours: number;
@@ -78,6 +84,7 @@ export function CreateAssessmentForm({
   const [copied, setCopied] = React.useState(false);
 
   const availableSets = questionSets.filter((s) => s.competency_id === competencyId);
+  const selectedQuestionCount = questionCounts[competencyId] ?? 0;
 
   function handleSelectCompetency(competency: Competency) {
     setCompetencyId(competency.id);
@@ -338,17 +345,31 @@ export function CreateAssessmentForm({
             <div>
               <p className="mb-2 text-sm font-medium text-slate-700">Competency</p>
               <div className="flex flex-wrap gap-2">
-                {activeCompetencies.map((c) => (
-                  <button
-                    type="button"
-                    key={c.id}
-                    onClick={() => handleSelectCompetency(c)}
-                    className={`rounded-full transition-opacity ${competencyId === c.id ? '' : 'opacity-50 hover:opacity-80'}`}
-                  >
-                    <CompetencyBadge code={c.code} name={`${c.code} — ${c.competency_name}`} />
-                  </button>
-                ))}
+                {activeCompetencies.map((c) => {
+                  const count = questionCounts[c.id] ?? 0;
+                  return (
+                    <button
+                      type="button"
+                      key={c.id}
+                      onClick={() => handleSelectCompetency(c)}
+                      className={`rounded-full transition-opacity ${competencyId === c.id ? '' : 'opacity-50 hover:opacity-80'}`}
+                    >
+                      <CompetencyBadge code={c.code} name={`${c.code} — ${c.competency_name} (${count} Qs)`} />
+                    </button>
+                  );
+                })}
               </div>
+              {activeCompetencies.length === 0 && (
+                <p className="mt-2 text-sm text-slate-500">
+                  No competency is active yet. Activate one in Settings once its question bank is ready.
+                </p>
+              )}
+              {selectedQuestionCount === 0 && activeCompetencies.length > 0 && (
+                <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  This competency has no active questions yet. Add questions in the Question Bank before creating an
+                  assessment for it.
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -474,7 +495,7 @@ export function CreateAssessmentForm({
             </FormField>
           </CardContent>
           <CardFooter>
-            <Button type="submit" className="w-full" disabled={submitting}>
+            <Button type="submit" className="w-full" disabled={submitting || selectedQuestionCount === 0}>
               {submitting ? 'Creating…' : 'Create Assessment & Generate Link'}
             </Button>
           </CardFooter>

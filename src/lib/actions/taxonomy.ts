@@ -16,6 +16,23 @@ export async function getCompetencies() {
   return data;
 }
 
+/** Active-question count per competency, keyed by competency_id. Used by
+ * Create Assessment so any competency -- present or future, technical or
+ * HSE -- shows the examiner exactly how many questions are actually usable
+ * before they try to build an exam from an empty bank, instead of the
+ * competency silently not working or failing only after form submission. */
+export async function getActiveQuestionCounts(): Promise<Record<string, number>> {
+  await requireUser();
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.from('questions').select('competency_id').eq('active', true);
+  if (error) throw new Error(error.message);
+  const counts: Record<string, number> = {};
+  for (const row of data ?? []) {
+    counts[row.competency_id] = (counts[row.competency_id] ?? 0) + 1;
+  }
+  return counts;
+}
+
 export async function getQuestionSets(competencyId?: string) {
   await requireUser();
   const supabase = await createSupabaseServerClient();
