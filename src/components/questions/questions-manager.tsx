@@ -32,7 +32,7 @@ interface QuestionRow {
   image_url: string | null;
   competencies: { code: string; competency_name: string } | null;
   question_sets: { set_name: string } | null;
-  competency_areas: { code: string; area_name: string } | null;
+  competency_areas: { code: string; area_name: string; competency_type: 'knowledge' | 'skill' } | null;
   question_options: { id: string; option_key: string; option_text: string; is_correct: boolean; sort_order: number }[];
 }
 
@@ -53,7 +53,13 @@ export function QuestionsManager({
     active: boolean;
     competencies: { code: string; competency_name: string } | null;
   }[];
-  competencyAreas?: { id: string; competency_id: string; code: string; area_name: string }[];
+  competencyAreas?: {
+    id: string;
+    competency_id: string;
+    code: string;
+    area_name: string;
+    competency_type: 'knowledge' | 'skill';
+  }[];
   role: RoleName;
   /** True for a manager-tier viewer role (e.g. HSE Manager) -- can add/edit
    * questions, but not deactivate, delete, bulk-import, or manage question
@@ -147,7 +153,8 @@ export function QuestionsManager({
           <Thead>
             <Tr>
               <Th>Competency</Th>
-              <Th>Area</Th>
+              <Th>Element</Th>
+              <Th>Type</Th>
               <Th>Set</Th>
               <Th>Type</Th>
               <Th>Question</Th>
@@ -162,6 +169,19 @@ export function QuestionsManager({
               <Tr key={q.id}>
                 <Td>{q.competencies && <CompetencyBadge code={q.competencies.code} />}</Td>
                 <Td className="text-slate-500">{q.competency_areas?.area_name ?? '—'}</Td>
+                <Td>
+                  {q.competency_areas && (
+                    <Badge
+                      className={
+                        q.competency_areas.competency_type === 'skill'
+                          ? 'border-violet-200 bg-violet-50 text-violet-700'
+                          : 'border-sky-200 bg-sky-50 text-sky-700'
+                      }
+                    >
+                      {q.competency_areas.competency_type === 'skill' ? 'Skill' : 'Knowledge'}
+                    </Badge>
+                  )}
+                </Td>
                 <Td className="text-slate-500">{q.question_sets?.set_name ?? '—'}</Td>
                 <Td className="text-slate-500">{QUESTION_TYPE_LABELS[q.question_type]}</Td>
                 <Td className="max-w-sm" title={q.question_text}>

@@ -135,6 +135,7 @@ export async function createCompetencyArea(input: z.infer<typeof competencyAreaS
     competency_id: parsed.data.competency_id,
     code: parsed.data.code,
     area_name: parsed.data.area_name,
+    competency_type: parsed.data.competency_type,
     sort_order: parsed.data.sort_order,
     active: parsed.data.active,
   });
@@ -165,6 +166,7 @@ export async function updateCompetencyArea(
     .update({
       code: parsed.data.code,
       area_name: parsed.data.area_name,
+      competency_type: parsed.data.competency_type,
       sort_order: parsed.data.sort_order,
       active: parsed.data.active,
     })

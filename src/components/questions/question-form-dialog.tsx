@@ -34,10 +34,10 @@ export interface EditableQuestion {
 
 const KEYS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
-function emptyForm(competencyId: string): QuestionInput {
+function emptyForm(competencyId: string, defaultAreaId: string | null = null): QuestionInput {
   return {
     competency_id: competencyId,
-    competency_area_id: null,
+    competency_area_id: defaultAreaId,
     question_set_id: null,
     question_type: 'single',
     question_text: '',
@@ -67,7 +67,13 @@ export function QuestionFormDialog({
   onOpenChange: (open: boolean) => void;
   competencies: { id: string; code: string; competency_name: string }[];
   questionSets: { id: string; competency_id: string; set_name: string }[];
-  competencyAreas?: { id: string; competency_id: string; code: string; area_name: string }[];
+  competencyAreas?: {
+    id: string;
+    competency_id: string;
+    code: string;
+    area_name: string;
+    competency_type: 'knowledge' | 'skill';
+  }[];
   question?: EditableQuestion | null;
   onSaved: () => void;
 }) {
@@ -95,14 +101,37 @@ export function QuestionFormDialog({
         image_url: question.image_url ?? null,
       });
     } else {
-      setForm(emptyForm(competencies[0]?.id ?? ''));
+      const defaultCompetencyId = competencies[0]?.id ?? '';
+      const defaultAreaId = competencyAreas.find((a) => a.competency_id === defaultCompetencyId)?.id ?? null;
+      setForm(emptyForm(defaultCompetencyId, defaultAreaId));
     }
     setErrors({});
     setUploadingImage(false);
-  }, [open, question, competencies]);
+  }, [open, question, competencies, competencyAreas]);
 
   const availableSets = questionSets.filter((s) => s.competency_id === form.competency_id);
   const availableAreas = competencyAreas.filter((a) => a.competency_id === form.competency_id);
+  // Competency Type is never entered manually -- it's always derived from
+  // the selected Competency + Element via competency_areas.competency_type,
+  // the single source of truth also used by bulk upload. Same rule: this
+  // must be looked up per (competency, element), never assumed from the
+  // element name alone (e.g. "Leadership and Commitment" is Knowledge under
+  // HSE Advisor but Skill under HSE Manager).
+  const selectedArea = availableAreas.find((a) => a.id === form.competency_area_id);
+
+  // An HSE competency always has Elements configured -- Element is required
+  // there (same rule bulk upload enforces). Rather than leaving a stale or
+  // "Unassigned" Element selected after switching Competency, resolve both
+  // fields together in the Competency select's own onChange (see below)
+  // instead of a separate effect.
+  function handleCompetencyChange(competencyId: string) {
+    const areasForNext = competencyAreas.filter((a) => a.competency_id === competencyId);
+    setForm((prev) => ({
+      ...prev,
+      competency_id: competencyId,
+      competency_area_id: areasForNext[0]?.id ?? null,
+    }));
+  }
 
   function setField<K extends keyof QuestionInput>(key: K, value: QuestionInput[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -209,7 +238,7 @@ export function QuestionFormDialog({
             <Select
               id="competency_id"
               value={form.competency_id}
-              onChange={(e) => setField('competency_id', e.target.value)}
+              onChange={(e) => handleCompetencyChange(e.target.value)}
             >
               {competencies.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -233,19 +262,30 @@ export function QuestionFormDialog({
             </Select>
           </FormField>
           {availableAreas.length > 0 && (
-            <FormField label="Competency Area" htmlFor="competency_area_id" hint="Used to break assessment scores down by area.">
+            <FormField
+              label="Element"
+              htmlFor="competency_area_id"
+              hint="Competency Type (Knowledge/Skill) is derived automatically from Competency + Element."
+            >
               <Select
                 id="competency_area_id"
                 value={form.competency_area_id ?? ''}
                 onChange={(e) => setField('competency_area_id', e.target.value || null)}
               >
-                <option value="">Unassigned</option>
                 {availableAreas.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.code} — {a.area_name}
+                    {a.code} — {a.area_name} ({a.competency_type === 'skill' ? 'Skill' : 'Knowledge'})
                   </option>
                 ))}
               </Select>
+              {selectedArea && (
+                <p className="mt-1.5 text-xs text-slate-500">
+                  Competency Type:{' '}
+                  <span className="font-medium text-slate-700">
+                    {selectedArea.competency_type === 'skill' ? 'Skill' : 'Knowledge'}
+                  </span>
+                </p>
+              )}
             </FormField>
           )}
           <FormField label="Question Type" htmlFor="question_type" required>

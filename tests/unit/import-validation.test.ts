@@ -1,16 +1,32 @@
 import { describe, it, expect } from 'vitest';
-import { validateImportRows, questionDuplicateKey } from '@/lib/import/validate-rows';
+import { validateImportRows, questionDuplicateKey, type ImportCompetency, type ImportCompetencyArea } from '@/lib/import/validate-rows';
 import type { RawImportRow } from '@/lib/import/parse-file';
 
-const COMPETENCIES = [
-  { id: 'comp-loa', code: 'LOA' },
-  { id: 'comp-sft', code: 'SFT' },
-  { id: 'comp-ptw', code: 'PTW' },
+const COMPETENCIES: ImportCompetency[] = [
+  { id: 'comp-loa', code: 'LOA', competency_name: 'Limitation of Access', stream: 'technical' },
+  { id: 'comp-sft', code: 'SFT', competency_name: 'Sanction for Test', stream: 'technical' },
+  { id: 'comp-ptw', code: 'PTW', competency_name: 'Permit to Work', stream: 'technical' },
+  { id: 'comp-hse-adv', code: 'HSE_ADV', competency_name: 'HSE Advisor', stream: 'hse' },
+  { id: 'comp-hse-mgr', code: 'HSE_MGR', competency_name: 'HSE Manager', stream: 'hse' },
 ];
 
 const QUESTION_SETS = [
   { id: 'set-loa-a', competency_id: 'comp-loa', set_name: 'Set A' },
   { id: 'set-sft-a', competency_id: 'comp-sft', set_name: 'Set A' },
+];
+
+// A trimmed-down slice of the real 22-element master mapping (migration
+// 0018), enough to exercise the Competency+Element -> Competency Type rules
+// without repeating all 22 in every test.
+const HSE_AREAS: ImportCompetencyArea[] = [
+  { id: 'adv-a02', competency_id: 'comp-hse-adv', code: 'A02', area_name: 'HSE Management System', competency_type: 'knowledge' },
+  { id: 'adv-a03', competency_id: 'comp-hse-adv', code: 'A03', area_name: 'Leadership and Commitment', competency_type: 'knowledge' },
+  { id: 'adv-a05', competency_id: 'comp-hse-adv', code: 'A05', area_name: 'Organisational Roles, Responsibilities, Competence & Authorities', competency_type: 'knowledge' },
+  { id: 'adv-a16', competency_id: 'comp-hse-adv', code: 'A16', area_name: 'Audit & Inspection', competency_type: 'skill' },
+  { id: 'adv-a17', competency_id: 'comp-hse-adv', code: 'A17', area_name: 'Environmental Management', competency_type: 'knowledge' },
+  { id: 'mgr-a02', competency_id: 'comp-hse-mgr', code: 'A02', area_name: 'HSE Management System', competency_type: 'skill' },
+  { id: 'mgr-a03', competency_id: 'comp-hse-mgr', code: 'A03', area_name: 'Leadership and Commitment', competency_type: 'skill' },
+  { id: 'mgr-a17', competency_id: 'comp-hse-mgr', code: 'A17', area_name: 'Environmental Management', competency_type: 'knowledge' },
 ];
 
 function row(rowNumber: number, values: Record<string, string>): RawImportRow {
@@ -93,14 +109,14 @@ describe('validateImportRows', () => {
     ]);
   });
 
-  it('flags a missing competency code', () => {
+  it('flags a missing competency', () => {
     const rows = [row(2, { questiontype: 'single', questiontext: 'Q', optiona: 'A', optionb: 'B', correctanswer: 'A' })];
     const [result] = validateImportRows(rows, COMPETENCIES, QUESTION_SETS, new Set());
     expect(result.insert).toBeNull();
-    expect(result.errors).toContain('Missing competency code');
+    expect(result.errors).toContain('Missing Competency');
   });
 
-  it('flags an invalid/unknown competency code', () => {
+  it('flags an invalid/unknown competency', () => {
     const rows = [
       row(2, {
         competencycode: 'XYZ',
@@ -113,7 +129,151 @@ describe('validateImportRows', () => {
     ];
     const [result] = validateImportRows(rows, COMPETENCIES, QUESTION_SETS, new Set());
     expect(result.insert).toBeNull();
-    expect(result.errors.some((e) => e.includes('Invalid competency code'))).toBe(true);
+    expect(result.errors.some((e) => e.includes('Invalid Competency'))).toBe(true);
+  });
+
+  it('rejects close-but-wrong Competency variants ("Advisor", "Safety Manager", "HSE-Manager", etc.)', () => {
+    for (const variant of ['Advisor', 'Adviser', 'Safety Advisor', 'HSE Adviser', 'Manager', 'Safety Manager', 'HSE-Manager']) {
+      const rows = [
+        row(2, { competency: variant, element: 'HSE Management System', questiontype: 'single', questiontext: 'Q', optiona: 'A', optionb: 'B', correctanswer: 'A' }),
+      ];
+      const [result] = validateImportRows(rows, COMPETENCIES, QUESTION_SETS, new Set(), HSE_AREAS);
+      expect(result.insert, `"${variant}" should not resolve to a competency`).toBeNull();
+      expect(result.errors.some((e) => e.includes('Invalid Competency'))).toBe(true);
+    }
+  });
+
+  it('accepts "HSE Advisor" / "HSE Manager" by exact name and normalizes whitespace/case only', () => {
+    const rows = [
+      row(2, { competency: '  hse advisor  ', element: 'HSE Management System', questiontype: 'single', questiontext: 'Q1', optiona: 'A', optionb: 'B', correctanswer: 'A' }),
+      row(3, { competency: 'HSE Manager', element: 'HSE Management System', questiontype: 'single', questiontext: 'Q2', optiona: 'A', optionb: 'B', correctanswer: 'A' }),
+    ];
+    const results = validateImportRows(rows, COMPETENCIES, QUESTION_SETS, new Set(), HSE_AREAS);
+    expect(results[0]!.insert?.competency_id).toBe('comp-hse-adv');
+    expect(results[1]!.insert?.competency_id).toBe('comp-hse-mgr');
+  });
+
+  it('requires an Element for HSE competencies but not for technical ones', () => {
+    const missingElement = validateImportRows(
+      [row(2, { competency: 'HSE Advisor', questiontype: 'single', questiontext: 'Q', optiona: 'A', optionb: 'B', correctanswer: 'A' })],
+      COMPETENCIES,
+      QUESTION_SETS,
+      new Set(),
+      HSE_AREAS
+    )[0]!;
+    expect(missingElement.insert).toBeNull();
+    expect(missingElement.errors.some((e) => e.includes('Missing Element'))).toBe(true);
+
+    const technicalNoElement = validateImportRows(
+      [row(2, { competencycode: 'LOA', questiontype: 'single', questiontext: 'Q', optiona: 'A', optionb: 'B', correctanswer: 'A' })],
+      COMPETENCIES,
+      QUESTION_SETS,
+      new Set()
+    )[0]!;
+    expect(technicalNoElement.errors).toEqual([]);
+  });
+
+  it('tolerates minor Element spelling/formatting differences (British/American spelling, "&" vs "and", punctuation)', () => {
+    const rows = [
+      row(2, {
+        competency: 'HSE Advisor',
+        element: 'Organizational Roles, Responsibilities, Competence and Authorities', // American spelling + "and"
+        questiontype: 'single',
+        questiontext: 'Q',
+        optiona: 'A',
+        optionb: 'B',
+        correctanswer: 'A',
+      }),
+      row(3, {
+        competency: 'HSE Advisor',
+        element: 'audit and inspection',
+        questiontype: 'single',
+        questiontext: 'Q2',
+        optiona: 'A',
+        optionb: 'B',
+        correctanswer: 'A',
+      }),
+    ];
+    const results = validateImportRows(rows, COMPETENCIES, QUESTION_SETS, new Set(), HSE_AREAS);
+    expect(results[0]!.errors).toEqual([]);
+    expect(results[0]!.insert?.competency_area_id).toBe('adv-a05');
+    expect(results[1]!.errors).toEqual([]);
+    expect(results[1]!.insert?.competency_area_id).toBe('adv-a16');
+  });
+
+  it('rejects an Element that does not resolve to any of the approved elements', () => {
+    const rows = [
+      row(2, { competency: 'HSE Advisor', element: 'Completely Unrelated Topic', questiontype: 'single', questiontext: 'Q', optiona: 'A', optionb: 'B', correctanswer: 'A' }),
+    ];
+    const [result] = validateImportRows(rows, COMPETENCIES, QUESTION_SETS, new Set(), HSE_AREAS);
+    expect(result.insert).toBeNull();
+    expect(result.errors.some((e) => e.includes('Invalid Element'))).toBe(true);
+  });
+
+  it('auto-derives Competency Type from Competency + Element when no Competency Type column is supplied', () => {
+    const rows = [
+      row(2, { competency: 'HSE Advisor', element: 'Leadership and Commitment', questiontype: 'single', questiontext: 'Q', optiona: 'A', optionb: 'B', correctanswer: 'A' }),
+      row(3, { competency: 'HSE Manager', element: 'Leadership and Commitment', questiontype: 'single', questiontext: 'Q2', optiona: 'A', optionb: 'B', correctanswer: 'A' }),
+    ];
+    const results = validateImportRows(rows, COMPETENCIES, QUESTION_SETS, new Set(), HSE_AREAS);
+    expect(results[0]!.preview.competency_type).toBe('knowledge'); // Advisor
+    expect(results[1]!.preview.competency_type).toBe('skill'); // Manager -- same element name, different type
+  });
+
+  it('accepts a Competency Type column that matches the master mapping', () => {
+    const rows = [
+      row(2, {
+        competency: 'HSE Manager',
+        element: 'Leadership and Commitment',
+        competencytype: 'Skill',
+        questiontype: 'single',
+        questiontext: 'Q',
+        optiona: 'A',
+        optionb: 'B',
+        correctanswer: 'A',
+      }),
+    ];
+    const [result] = validateImportRows(rows, COMPETENCIES, QUESTION_SETS, new Set(), HSE_AREAS);
+    expect(result.errors).toEqual([]);
+  });
+
+  it('rejects a Competency Type column that contradicts the master mapping, with the required message format', () => {
+    // HSE Advisor + Leadership and Commitment = Knowledge; sheet says Skill.
+    const rows = [
+      row(12, {
+        competency: 'HSE Advisor',
+        element: 'Leadership and Commitment',
+        competencytype: 'Skill',
+        questiontype: 'single',
+        questiontext: 'Q',
+        optiona: 'A',
+        optionb: 'B',
+        correctanswer: 'A',
+      }),
+    ];
+    const [result] = validateImportRows(rows, COMPETENCIES, QUESTION_SETS, new Set(), HSE_AREAS);
+    expect(result.insert).toBeNull();
+    expect(result.errors).toContain(
+      "Invalid Competency Type. 'Leadership and Commitment' is classified as 'Knowledge' for HSE Advisor."
+    );
+  });
+
+  it('rejects HSE Manager + Environmental Management tagged as Skill (master mapping says Knowledge)', () => {
+    const rows = [
+      row(2, {
+        competency: 'HSE Manager',
+        element: 'Environmental Management',
+        competencytype: 'Skill',
+        questiontype: 'single',
+        questiontext: 'Q',
+        optiona: 'A',
+        optionb: 'B',
+        correctanswer: 'A',
+      }),
+    ];
+    const [result] = validateImportRows(rows, COMPETENCIES, QUESTION_SETS, new Set(), HSE_AREAS);
+    expect(result.insert).toBeNull();
+    expect(result.errors.some((e) => e.includes("is classified as 'Knowledge' for HSE Manager"))).toBe(true);
   });
 
   it('flags an invalid question set for the given competency', () => {
@@ -130,7 +290,7 @@ describe('validateImportRows', () => {
     ];
     const [result] = validateImportRows(rows, COMPETENCIES, QUESTION_SETS, new Set());
     expect(result.insert).toBeNull();
-    expect(result.errors.some((e) => e.includes('Invalid question set'))).toBe(true);
+    expect(result.errors.some((e) => e.includes('Invalid Question Set'))).toBe(true);
   });
 
   it('flags an invalid question type', () => {
@@ -139,7 +299,37 @@ describe('validateImportRows', () => {
     ];
     const [result] = validateImportRows(rows, COMPETENCIES, QUESTION_SETS, new Set());
     expect(result.insert).toBeNull();
-    expect(result.errors.some((e) => e.includes('Invalid question type'))).toBe(true);
+    expect(result.errors.some((e) => e.includes('Invalid Question Type'))).toBe(true);
+  });
+
+  it('treats "Scenario" question type as single-choice and requires Scenario Text', () => {
+    const missingScenarioText = validateImportRows(
+      [row(2, { competencycode: 'LOA', questiontype: 'scenario', questiontext: 'Q', optiona: 'A', optionb: 'B', correctanswer: 'A' })],
+      COMPETENCIES,
+      QUESTION_SETS,
+      new Set()
+    )[0]!;
+    expect(missingScenarioText.insert).toBeNull();
+    expect(missingScenarioText.errors.some((e) => e.includes('Scenario Text'))).toBe(true);
+
+    const ok = validateImportRows(
+      [
+        row(2, {
+          competencycode: 'LOA',
+          questiontype: 'scenario',
+          scenariotext: 'You arrive on site and notice...',
+          questiontext: 'What should you do first?',
+          optiona: 'A',
+          optionb: 'B',
+          correctanswer: 'A',
+        }),
+      ],
+      COMPETENCIES,
+      QUESTION_SETS,
+      new Set()
+    )[0]!;
+    expect(ok.errors).toEqual([]);
+    expect(ok.insert?.question_type).toBe('single');
   });
 
   it('flags a missing question text', () => {
@@ -147,7 +337,7 @@ describe('validateImportRows', () => {
       row(2, { competencycode: 'LOA', questiontype: 'single', optiona: 'A', optionb: 'B', correctanswer: 'A' }),
     ];
     const [result] = validateImportRows(rows, COMPETENCIES, QUESTION_SETS, new Set());
-    expect(result.errors).toContain('Missing question text');
+    expect(result.errors).toContain('Missing Question text');
   });
 
   it('flags fewer than two answer options for a single/multiple question', () => {
@@ -161,7 +351,7 @@ describe('validateImportRows', () => {
   it('flags a missing correct answer', () => {
     const rows = [row(2, { competencycode: 'LOA', questiontype: 'single', questiontext: 'Q', optiona: 'A', optionb: 'B' })];
     const [result] = validateImportRows(rows, COMPETENCIES, QUESTION_SETS, new Set());
-    expect(result.errors).toContain('Missing correct answer');
+    expect(result.errors).toContain('Missing Correct Answer');
   });
 
   it('flags a correct answer that references a nonexistent option', () => {
@@ -210,18 +400,30 @@ describe('validateImportRows', () => {
     expect(result.errors.some((e) => e.includes('at least two correct answers'))).toBe(true);
   });
 
-  it('flags duplicate questions within the same file (same competency + normalized text)', () => {
+  it('flags duplicate questions within the same file (same competency + element + normalized text)', () => {
     const rows = [
       row(2, { competencycode: 'LOA', questiontype: 'single', questiontext: 'What is the limit?', optiona: 'A', optionb: 'B', correctanswer: 'A' }),
       row(3, { competencycode: 'LOA', questiontype: 'single', questiontext: '  what IS the limit?  ', optiona: 'A', optionb: 'B', correctanswer: 'A' }),
     ];
     const results = validateImportRows(rows, COMPETENCIES, QUESTION_SETS, new Set());
     expect(results[0]!.errors).toEqual([]);
+    expect(results[0]!.isDuplicate).toBe(false);
     expect(results[1]!.errors.some((e) => e.includes('Duplicate of row 2'))).toBe(true);
+    expect(results[1]!.isDuplicate).toBe(true);
   });
 
-  it('flags a question that already exists in the question bank for that competency', () => {
-    const existingKey = questionDuplicateKey('comp-loa', 'Already in the bank');
+  it('does not flag the same question text as a duplicate under a different Element of the same competency', () => {
+    const rows = [
+      row(2, { competency: 'HSE Advisor', element: 'Leadership and Commitment', questiontype: 'single', questiontext: 'Shared wording', optiona: 'A', optionb: 'B', correctanswer: 'A' }),
+      row(3, { competency: 'HSE Advisor', element: 'HSE Management System', questiontype: 'single', questiontext: 'Shared wording', optiona: 'A', optionb: 'B', correctanswer: 'A' }),
+    ];
+    const results = validateImportRows(rows, COMPETENCIES, QUESTION_SETS, new Set(), HSE_AREAS);
+    expect(results[0]!.errors).toEqual([]);
+    expect(results[1]!.errors).toEqual([]);
+  });
+
+  it('flags a question that already exists in the question bank for that competency/element', () => {
+    const existingKey = questionDuplicateKey('comp-loa', null, 'Already in the bank');
     const rows = [
       row(2, { competencycode: 'LOA', questiontype: 'single', questiontext: 'Already in the bank', optiona: 'A', optionb: 'B', correctanswer: 'A' }),
     ];
@@ -237,7 +439,7 @@ describe('validateImportRows', () => {
     ];
     const results = validateImportRows(rows, COMPETENCIES, QUESTION_SETS, new Set());
     expect(results[0]!.errors).toEqual([]);
-    expect(results[1]!.errors.some((e) => e.includes('Duplicate of row 2'))).toBe(true);
+    expect(results[1]!.errors.some((e) => e.includes('Duplicate of row 2'))).toBe(false);
   });
 
   it('defaults marks to 1 when omitted, but rejects a non-positive marks value', () => {
@@ -251,7 +453,7 @@ describe('validateImportRows', () => {
       row(2, { competencycode: 'LOA', questiontype: 'single', questiontext: 'Q', optiona: 'A', optionb: 'B', correctanswer: 'A', marks: '0' }),
     ];
     const [badResult] = validateImportRows(badRows, COMPETENCIES, QUESTION_SETS, new Set());
-    expect(badResult.errors.some((e) => e.includes('Invalid marks value'))).toBe(true);
+    expect(badResult.errors.some((e) => e.includes('Invalid Marks value'))).toBe(true);
   });
 
   it('rejects an invalid difficulty value while accepting valid ones', () => {
@@ -267,7 +469,7 @@ describe('validateImportRows', () => {
       }),
     ];
     const [result] = validateImportRows(rows, COMPETENCIES, QUESTION_SETS, new Set());
-    expect(result.errors.some((e) => e.includes('Invalid difficulty'))).toBe(true);
+    expect(result.errors.some((e) => e.includes('Invalid Difficulty'))).toBe(true);
   });
 
   it('defaults active to true, and honors an explicit FALSE', () => {

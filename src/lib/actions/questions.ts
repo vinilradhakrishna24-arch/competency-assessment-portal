@@ -282,7 +282,7 @@ export async function getQuestions(filters?: {
   let query = supabase
     .from('questions')
     .select(
-      '*, question_options(*), competencies(code, competency_name), question_sets(set_name), competency_areas(code, area_name)'
+      '*, question_options(*), competencies(code, competency_name), question_sets(set_name), competency_areas(code, area_name, competency_type)'
     )
     .order('created_at', { ascending: false });
 

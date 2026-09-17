@@ -106,6 +106,10 @@ export interface CompetencyArea {
   competency_id: string;
   code: string;
   area_name: string;
+  /** Knowledge or Skill -- always specific to THIS (competency, element)
+   * pair, never a global per-element mapping. This is the single source of
+   * truth for Competency Type everywhere in the app. Migration 0018. */
+  competency_type: 'knowledge' | 'skill';
   sort_order: number;
   active: boolean;
   created_at: string;

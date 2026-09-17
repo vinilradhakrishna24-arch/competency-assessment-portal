@@ -55,10 +55,10 @@ export async function parseQuestionImportFile(formData: FormData): Promise<Parse
 
   const supabase = await createSupabaseServerClient();
   const [competenciesRes, questionSetsRes, existingQuestionsRes, competencyAreasRes] = await Promise.all([
-    supabase.from('competencies').select('id, code'),
+    supabase.from('competencies').select('id, code, competency_name, stream'),
     supabase.from('question_sets').select('id, competency_id, set_name'),
-    supabase.from('questions').select('competency_id, question_text'),
-    supabase.from('competency_areas').select('id, competency_id, code, area_name'),
+    supabase.from('questions').select('competency_id, competency_area_id, question_text'),
+    supabase.from('competency_areas').select('id, competency_id, code, area_name, competency_type'),
   ]);
 
   if (competenciesRes.error || questionSetsRes.error || existingQuestionsRes.error || competencyAreasRes.error) {
@@ -66,7 +66,9 @@ export async function parseQuestionImportFile(formData: FormData): Promise<Parse
   }
 
   const existingKeys = new Set(
-    (existingQuestionsRes.data ?? []).map((q) => questionDuplicateKey(q.competency_id, q.question_text))
+    (existingQuestionsRes.data ?? []).map((q) =>
+      questionDuplicateKey(q.competency_id, q.competency_area_id, q.question_text)
+    )
   );
 
   const rows = validateImportRows(

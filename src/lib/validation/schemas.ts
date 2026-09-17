@@ -142,6 +142,11 @@ export const competencyAreaSchema = z.object({
   competency_id: z.string().uuid('Select a competency'),
   code: z.string().trim().min(1, 'Code is required').max(20),
   area_name: z.string().trim().min(1, 'Area name is required').max(200),
+  // Knowledge or Skill for THIS competency+element pair specifically -- the
+  // same element name can be Knowledge under one competency and Skill under
+  // another (e.g. "Leadership and Commitment"), so this is never optional
+  // and never inferred from area_name alone. See migration 0018.
+  competency_type: z.enum(['knowledge', 'skill'], { message: 'Select Knowledge or Skill' }),
   sort_order: z.coerce.number().int().min(0).default(0),
   active: z.boolean().default(true),
 });

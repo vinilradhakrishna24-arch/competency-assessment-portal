@@ -20,16 +20,25 @@ const TEMPLATE_CSV = [
   'PTW,,Set B,true_false,"A hot work permit is valid for more than one shift unless explicitly extended.",,,,,,False,1,easy,,TRUE',
 ].join('\n');
 
-function downloadTemplate() {
+function downloadTechnicalTemplate() {
   const blob = new Blob([TEMPLATE_CSV], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'question_import_template.csv';
+  a.download = 'technical_question_import_template.csv';
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+function downloadHseTemplate() {
+  const a = document.createElement('a');
+  a.href = '/api/questions/import-template';
+  a.download = 'hse_question_bank_template.xlsx';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 export function ImportWizard() {
@@ -43,6 +52,29 @@ export function ImportWizard() {
 
   const validRows = rows.filter((r) => r.insert);
   const errorRows = rows.filter((r) => !r.insert);
+  const duplicateRows = rows.filter((r) => r.isDuplicate);
+
+  // Distribution summary shown above the preview table -- required before
+  // confirming import so an admin can sanity-check the batch (e.g. "did I
+  // really mean to add 40 Knowledge questions and 0 Skill questions?")
+  // rather than only seeing a flat row-by-row list.
+  const distribution = React.useMemo(() => {
+    const byCompetency = new Map<
+      string,
+      { knowledge: number; skill: number; elements: Map<string, number> }
+    >();
+    for (const r of validRows) {
+      const name = r.preview.competency_name;
+      const entry = byCompetency.get(name) ?? { knowledge: 0, skill: 0, elements: new Map<string, number>() };
+      if (r.preview.competency_type === 'knowledge') entry.knowledge += 1;
+      if (r.preview.competency_type === 'skill') entry.skill += 1;
+      if (r.preview.element_name && r.preview.element_name !== '—') {
+        entry.elements.set(r.preview.element_name, (entry.elements.get(r.preview.element_name) ?? 0) + 1);
+      }
+      byCompetency.set(name, entry);
+    }
+    return byCompetency;
+  }, [validRows]);
 
   async function handleFileSelected(file: File) {
     setFileName(file.name);
@@ -117,14 +149,19 @@ export function ImportWizard() {
           </Button>
         </div>
 
-        <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3">
+        <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm text-slate-600">
-            Not sure of the format? Download a starter template with sample rows for each question type. The
-            &quot;Competency Area&quot; column is optional — leave it blank unless you&apos;re tagging an HSE question to one of that competency&apos;s configured areas.
+            Not sure of the format? Download the HSE Question Bank template — it includes dropdowns, the full
+            Element → Competency Type mapping for HSE Advisor and HSE Manager, and instructions.
           </div>
-          <Button variant="outline" size="sm" onClick={downloadTemplate}>
-            <Download className="h-3.5 w-3.5" /> Download Template
-          </Button>
+          <div className="flex shrink-0 gap-2">
+            <Button variant="outline" size="sm" onClick={downloadHseTemplate}>
+              <Download className="h-3.5 w-3.5" /> HSE Question Bank Template
+            </Button>
+            <Button variant="ghost" size="sm" onClick={downloadTechnicalTemplate}>
+              <Download className="h-3.5 w-3.5" /> Technical Template (CSV)
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -135,6 +172,7 @@ export function ImportWizard() {
       <div className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap gap-2">
+            <Badge className="border-slate-200 bg-slate-100 text-slate-700">Total Rows: {rows.length}</Badge>
             <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700">
               <CheckCircle2 className="h-3.5 w-3.5" /> {validRows.length} ready to import
             </Badge>
@@ -142,6 +180,9 @@ export function ImportWizard() {
               <Badge className="border-rose-200 bg-rose-50 text-rose-700">
                 <XCircle className="h-3.5 w-3.5" /> {errorRows.length} with errors (skipped)
               </Badge>
+            )}
+            {duplicateRows.length > 0 && (
+              <Badge className="border-amber-200 bg-amber-50 text-amber-700">{duplicateRows.length} duplicates</Badge>
             )}
           </div>
           <div className="flex gap-2">
@@ -154,12 +195,42 @@ export function ImportWizard() {
           </div>
         </div>
 
+        {distribution.size > 0 && (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {Array.from(distribution.entries()).map(([competencyName, d]) => (
+              <div key={competencyName} className="rounded-xl border border-slate-200 bg-white p-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-sm font-semibold text-slate-900">{competencyName}</p>
+                  <p className="text-xs text-slate-500">
+                    {d.knowledge + d.skill} question{d.knowledge + d.skill === 1 ? '' : 's'}
+                  </p>
+                </div>
+                <div className="mb-3 flex gap-2">
+                  <Badge className="border-sky-200 bg-sky-50 text-sky-700">Knowledge: {d.knowledge}</Badge>
+                  <Badge className="border-violet-200 bg-violet-50 text-violet-700">Skill: {d.skill}</Badge>
+                </div>
+                {d.elements.size > 0 && (
+                  <ul className="space-y-0.5 text-xs text-slate-500">
+                    {Array.from(d.elements.entries())
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([element, count]) => (
+                        <li key={element}>
+                          {element} — {count} Question{count === 1 ? '' : 's'}
+                        </li>
+                      ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
         <Table>
           <Thead>
             <Tr>
               <Th>Row</Th>
               <Th>Competency</Th>
-              <Th>Area</Th>
+              <Th>Element</Th>
               <Th>Set</Th>
               <Th>Type</Th>
               <Th>Question</Th>
@@ -172,8 +243,15 @@ export function ImportWizard() {
             {rows.map((row) => (
               <Tr key={row.rowNumber}>
                 <Td className="text-slate-400">{row.rowNumber}</Td>
-                <Td>{row.preview.competency_code}</Td>
-                <Td className="text-slate-500">{row.preview.competency_area_name}</Td>
+                <Td>{row.preview.competency_name}</Td>
+                <Td className="text-slate-500">
+                  {row.preview.element_name}
+                  {row.preview.competency_type && (
+                    <span className="ml-1 text-xs text-slate-400">
+                      ({row.preview.competency_type === 'skill' ? 'Skill' : 'Knowledge'})
+                    </span>
+                  )}
+                </Td>
                 <Td className="text-slate-500">{row.preview.question_set_name}</Td>
                 <Td className="text-slate-500">{row.preview.question_type}</Td>
                 <Td className="max-w-xs truncate" title={row.preview.question_text}>

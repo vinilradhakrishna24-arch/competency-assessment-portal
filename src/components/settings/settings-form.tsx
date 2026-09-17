@@ -5,8 +5,9 @@ import { toast } from 'sonner';
 import { Plus, Trash2, EyeOff, Eye } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { FormField, Input, Textarea } from '@/components/ui/input';
+import { FormField, Input, Textarea, Select } from '@/components/ui/input';
 import { Table, Thead, Tbody, Tr, Th, Td } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 import { CompetencyBadge } from '@/components/competency/competency-badge';
 import { updateBranding, updateOperationalSettings } from '@/lib/actions/settings';
 import {
@@ -463,10 +464,12 @@ function CompetencyAreasManager({
   initialAreas: CompetencyArea[];
 }) {
   const [areas, setAreas] = React.useState(initialAreas);
-  const [drafts, setDrafts] = React.useState<Record<string, { code: string; area_name: string; sort_order: string }>>(
-    Object.fromEntries(competencies.map((c) => [c.id, { code: '', area_name: '', sort_order: '0' }]))
-  );
-  const [editing, setEditing] = React.useState<Record<string, { code: string; area_name: string; sort_order: string }>>({});
+  const [drafts, setDrafts] = React.useState<
+    Record<string, { code: string; area_name: string; competency_type: 'knowledge' | 'skill'; sort_order: string }>
+  >(Object.fromEntries(competencies.map((c) => [c.id, { code: '', area_name: '', competency_type: 'knowledge' as const, sort_order: '0' }])));
+  const [editing, setEditing] = React.useState<
+    Record<string, { code: string; area_name: string; competency_type: 'knowledge' | 'skill'; sort_order: string }>
+  >({});
   const [busyId, setBusyId] = React.useState<string | null>(null);
 
   function areasFor(competencyId: string) {
@@ -484,6 +487,7 @@ function CompetencyAreasManager({
       competency_id: competency.id,
       code: draft.code.trim(),
       area_name: draft.area_name.trim(),
+      competency_type: draft.competency_type,
       sort_order: Number(draft.sort_order) || 0,
       active: true,
     });
@@ -493,7 +497,7 @@ function CompetencyAreasManager({
       return;
     }
     toast.success('Area added');
-    setDrafts((prev) => ({ ...prev, [competency.id]: { code: '', area_name: '', sort_order: '0' } }));
+    setDrafts((prev) => ({ ...prev, [competency.id]: { code: '', area_name: '', competency_type: 'knowledge', sort_order: '0' } }));
     // Server action already revalidates the page; refetch by reloading isn't
     // ideal for a form, so optimistically add a placeholder row using what
     // we know -- the next full page load will have the real id-consistent data.
@@ -504,6 +508,7 @@ function CompetencyAreasManager({
         competency_id: competency.id,
         code: draft.code.trim(),
         area_name: draft.area_name.trim(),
+        competency_type: draft.competency_type,
         sort_order: Number(draft.sort_order) || 0,
         active: true,
         created_at: new Date().toISOString(),
@@ -515,7 +520,12 @@ function CompetencyAreasManager({
   function startEdit(area: CompetencyArea) {
     setEditing((prev) => ({
       ...prev,
-      [area.id]: { code: area.code, area_name: area.area_name, sort_order: String(area.sort_order) },
+      [area.id]: {
+        code: area.code,
+        area_name: area.area_name,
+        competency_type: area.competency_type,
+        sort_order: String(area.sort_order),
+      },
     }));
   }
 
@@ -527,6 +537,7 @@ function CompetencyAreasManager({
       competency_id: area.competency_id,
       code: draft.code.trim(),
       area_name: draft.area_name.trim(),
+      competency_type: draft.competency_type,
       sort_order: Number(draft.sort_order) || 0,
       active: area.active,
     });
@@ -537,7 +548,17 @@ function CompetencyAreasManager({
     }
     toast.success('Area updated');
     setAreas((prev) =>
-      prev.map((a) => (a.id === area.id ? { ...a, code: draft.code.trim(), area_name: draft.area_name.trim(), sort_order: Number(draft.sort_order) || 0 } : a))
+      prev.map((a) =>
+        a.id === area.id
+          ? {
+              ...a,
+              code: draft.code.trim(),
+              area_name: draft.area_name.trim(),
+              competency_type: draft.competency_type,
+              sort_order: Number(draft.sort_order) || 0,
+            }
+          : a
+      )
     );
     setEditing((prev) => {
       const next = { ...prev };
@@ -591,6 +612,7 @@ function CompetencyAreasManager({
                     <Tr>
                       <Th>Code</Th>
                       <Th>Area Name</Th>
+                      <Th>Type</Th>
                       <Th>Order</Th>
                       <Th>Status</Th>
                       <Th />
@@ -616,6 +638,21 @@ function CompetencyAreasManager({
                                   value={edit.area_name}
                                   onChange={(e) => setEditing((prev) => ({ ...prev, [a.id]: { ...edit, area_name: e.target.value } }))}
                                 />
+                              </Td>
+                              <Td>
+                                <Select
+                                  className="w-32"
+                                  value={edit.competency_type}
+                                  onChange={(e) =>
+                                    setEditing((prev) => ({
+                                      ...prev,
+                                      [a.id]: { ...edit, competency_type: e.target.value as 'knowledge' | 'skill' },
+                                    }))
+                                  }
+                                >
+                                  <option value="knowledge">Knowledge</option>
+                                  <option value="skill">Skill</option>
+                                </Select>
                               </Td>
                               <Td>
                                 <Input
@@ -651,6 +688,17 @@ function CompetencyAreasManager({
                             <>
                               <Td className="font-medium text-slate-700">{a.code}</Td>
                               <Td>{a.area_name}</Td>
+                              <Td>
+                                <Badge
+                                  className={
+                                    a.competency_type === 'skill'
+                                      ? 'border-violet-200 bg-violet-50 text-violet-700'
+                                      : 'border-sky-200 bg-sky-50 text-sky-700'
+                                  }
+                                >
+                                  {a.competency_type === 'skill' ? 'Skill' : 'Knowledge'}
+                                </Badge>
+                              </Td>
                               <Td className="text-slate-500">{a.sort_order}</Td>
                               <Td>
                                 <span className={a.active ? 'text-emerald-700' : 'text-slate-400'}>
@@ -697,6 +745,23 @@ function CompetencyAreasManager({
                       onChange={(e) => setDrafts((prev) => ({ ...prev, [c.id]: { ...draft, area_name: e.target.value } }))}
                       placeholder="e.g. Risk Assessment"
                     />
+                  </FormField>
+                </div>
+                <div className="w-36">
+                  <FormField label="Type" htmlFor={`new_type_${c.id}`}>
+                    <Select
+                      id={`new_type_${c.id}`}
+                      value={draft.competency_type}
+                      onChange={(e) =>
+                        setDrafts((prev) => ({
+                          ...prev,
+                          [c.id]: { ...draft, competency_type: e.target.value as 'knowledge' | 'skill' },
+                        }))
+                      }
+                    >
+                      <option value="knowledge">Knowledge</option>
+                      <option value="skill">Skill</option>
+                    </Select>
                   </FormField>
                 </div>
                 <div className="w-20">
