@@ -19,6 +19,11 @@ export interface NavItem {
   label: string;
   icon: LucideIcon;
   roles: RoleName[];
+  /** Also show this item to a viewer-tier role whose roles.can_manage is
+   * true (e.g. HSE Manager), even though `roles` above doesn't include
+   * 'viewer'. Lets a manager-capable role reach Create Assessment/Question
+   * Bank without exposing those to every plain read-only Viewer too. */
+  managerAllowed?: boolean;
   /** Set only on items that exist once per competency stream (Dashboard,
    * Assessments, Question Bank, Certificates, Reports) -- the Sidebar
    * renders one copy under "Technical" and one under "HSE", each linking
@@ -34,7 +39,7 @@ export interface NavItem {
 export const STREAM_NAV_ITEMS: Omit<NavItem, 'stream'>[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'viewer'] },
   { href: '/assessments', label: 'Assessments', icon: ClipboardList, roles: ['admin', 'viewer'] },
-  { href: '/questions', label: 'Question Bank', icon: BookOpenCheck, roles: ['admin'] },
+  { href: '/questions', label: 'Question Bank', icon: BookOpenCheck, roles: ['admin'], managerAllowed: true },
   { href: '/certificates', label: 'Certificates', icon: Award, roles: ['admin', 'viewer'] },
   { href: '/reports', label: 'Reports', icon: BarChart3, roles: ['admin', 'viewer'] },
 ];
@@ -42,7 +47,7 @@ export const STREAM_NAV_ITEMS: Omit<NavItem, 'stream'>[] = [
 /** Everything else: not competency-stream-specific, so it appears once
  * regardless of which stream(s) the signed-in role can see. */
 export const SHARED_NAV_ITEMS: NavItem[] = [
-  { href: '/create-assessment', label: 'Create Assessment', icon: FilePlus2, roles: ['admin'] },
+  { href: '/create-assessment', label: 'Create Assessment', icon: FilePlus2, roles: ['admin'], managerAllowed: true },
   { href: '/candidates', label: 'Candidates', icon: Users, roles: ['admin', 'viewer'] },
   { href: '/approvals', label: 'Pending Approval', icon: ClipboardCheck, roles: ['admin'] },
   { href: '/users', label: 'Users & Roles', icon: UserCog, roles: ['admin'] },

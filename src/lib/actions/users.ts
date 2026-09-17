@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { requireAdmin } from '@/lib/auth/session';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { inviteUserSchema } from '@/lib/validation/schemas';
+import { inviteUserSchema, resetPasswordSchema } from '@/lib/validation/schemas';
 import { flattenZod } from '@/lib/validation/flatten';
 import { writeAuditLog } from '@/lib/audit/log';
 import { AUDIT_ACTIONS } from '@/lib/constants';
@@ -195,6 +195,38 @@ export async function deleteUser(userId: string): Promise<ActionResult> {
   });
 
   revalidatePath('/users');
+  return { ok: true };
+}
+
+/** Admin-only: set a new password for an existing internal user (e.g. when
+ * they've forgotten it or a newly-created account's initial password never
+ * reached them). Uses the GoTrue Admin API -- never touches auth.users
+ * directly -- so hashing, session invalidation, and audit fields on the
+ * auth side stay consistent with how Supabase Auth itself manages
+ * passwords. The new password is returned to the admin in this one
+ * response only; it is never logged or stored anywhere. */
+export async function resetUserPassword(
+  userId: string,
+  newPassword: string
+): Promise<ActionResult> {
+  const admin = await requireAdmin();
+  const parsed = resetPasswordSchema.safeParse({ password: newPassword });
+  if (!parsed.success) return { ok: false, fieldErrors: flattenZod(parsed.error) };
+
+  const supabaseAdmin = createSupabaseAdminClient();
+  const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+    password: parsed.data.password,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  await writeAuditLog({
+    actorUserId: admin.id,
+    actorType: 'admin',
+    action: AUDIT_ACTIONS.USER_PASSWORD_RESET,
+    entityType: 'profile',
+    entityId: userId,
+  });
+
   return { ok: true };
 }
 

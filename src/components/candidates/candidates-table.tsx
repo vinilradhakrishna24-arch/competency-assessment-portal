@@ -14,7 +14,17 @@ import { CandidateFormDialog } from '@/components/candidates/candidate-form-dial
 import { getCandidates, deleteCandidate } from '@/lib/actions/candidates';
 import type { Candidate, RoleName } from '@/types/database';
 
-export function CandidatesTable({ initialCandidates, role }: { initialCandidates: Candidate[]; role: RoleName }) {
+export function CandidatesTable({
+  initialCandidates,
+  role,
+  canManage = false,
+}: {
+  initialCandidates: Candidate[];
+  role: RoleName;
+  /** True for a manager-tier viewer role (e.g. HSE Manager) -- can add/edit
+   * candidates, but deleting stays Admin-only. */
+  canManage?: boolean;
+}) {
   const router = useRouter();
   const [candidates, setCandidates] = React.useState(initialCandidates);
   const [search, setSearch] = React.useState('');
@@ -22,7 +32,8 @@ export function CandidatesTable({ initialCandidates, role }: { initialCandidates
   const [editing, setEditing] = React.useState<Candidate | null>(null);
   const [deleting, setDeleting] = React.useState<Candidate | null>(null);
   const [deleteBusy, setDeleteBusy] = React.useState(false);
-  const canEdit = role === 'admin';
+  const isAdmin = role === 'admin';
+  const canEdit = isAdmin || canManage;
 
   async function refresh(term?: string) {
     const data = await getCandidates(term ?? search);
@@ -128,9 +139,11 @@ export function CandidatesTable({ initialCandidates, role }: { initialCandidates
                       >
                         <Pencil className="h-3.5 w-3.5" /> Edit
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => setDeleting(c)}>
-                        <Trash2 className="h-3.5 w-3.5" /> Delete
-                      </Button>
+                      {isAdmin && (
+                        <Button variant="ghost" size="sm" onClick={() => setDeleting(c)}>
+                          <Trash2 className="h-3.5 w-3.5" /> Delete
+                        </Button>
+                      )}
                     </div>
                   </Td>
                 )}

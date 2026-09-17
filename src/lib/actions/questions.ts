@@ -2,7 +2,7 @@
 
 import { randomUUID } from 'crypto';
 import { revalidatePath } from 'next/cache';
-import { requireAdmin, requireUser } from '@/lib/auth/session';
+import { requireAdmin, requireManagerOrAdmin, requireUser } from '@/lib/auth/session';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { questionSchema, type QuestionInput } from '@/lib/validation/schemas';
@@ -39,7 +39,7 @@ export interface UploadImageResult {
  * bytes never have to round-trip through the plain-object QuestionInput
  * those actions already use everywhere else. */
 export async function uploadQuestionImage(formData: FormData): Promise<UploadImageResult> {
-  await requireAdmin();
+  await requireManagerOrAdmin();
 
   const file = formData.get('file');
   if (!(file instanceof File)) return { ok: false, error: 'No file was provided.' };
@@ -86,11 +86,27 @@ async function deleteQuestionImageObject(imageUrl: string | null | undefined): P
 }
 
 export async function createQuestion(input: QuestionInput): Promise<ActionResult> {
-  const user = await requireAdmin();
+  const user = await requireManagerOrAdmin();
   const parsed = questionSchema.safeParse(input);
   if (!parsed.success) return { ok: false, fieldErrors: flattenZod(parsed.error) };
 
   const supabase = await createSupabaseServerClient();
+
+  // A manager-tier role (e.g. HSE Manager) is confined to its stream_scope --
+  // full Admin has streamScope === null and skips this check. RLS enforces
+  // the same restriction at the database layer (migration 0017); this check
+  // just returns a clear message instead of a bare RLS-denied insert error.
+  if (user.streamScope) {
+    const { data: comp } = await supabase
+      .from('competencies')
+      .select('stream')
+      .eq('id', parsed.data.competency_id)
+      .maybeSingle();
+    if (!comp || !user.streamScope.includes(comp.stream)) {
+      return { ok: false, error: 'You do not have access to add questions for this competency.' };
+    }
+  }
+
   const { data: question, error } = await supabase
     .from('questions')
     .insert({
@@ -128,7 +144,7 @@ export async function createQuestion(input: QuestionInput): Promise<ActionResult
 
   await writeAuditLog({
     actorUserId: user.id,
-    actorType: 'admin',
+    actorType: user.role,
     action: AUDIT_ACTIONS.QUESTION_CREATED,
     entityType: 'question',
     entityId: question.id,
@@ -140,12 +156,23 @@ export async function createQuestion(input: QuestionInput): Promise<ActionResult
 }
 
 export async function updateQuestion(id: string, input: QuestionInput): Promise<ActionResult> {
-  const user = await requireAdmin();
+  const user = await requireManagerOrAdmin();
   const parsed = questionSchema.safeParse(input);
   if (!parsed.success) return { ok: false, fieldErrors: flattenZod(parsed.error) };
 
   const supabase = await createSupabaseServerClient();
   const { data: before } = await supabase.from('questions').select('*').eq('id', id).maybeSingle();
+
+  if (user.streamScope) {
+    const { data: comp } = await supabase
+      .from('competencies')
+      .select('stream')
+      .eq('id', parsed.data.competency_id)
+      .maybeSingle();
+    if (!comp || !user.streamScope.includes(comp.stream)) {
+      return { ok: false, error: 'You do not have access to edit questions for this competency.' };
+    }
+  }
 
   const newImageUrl = toNullable(parsed.data.image_url);
 
@@ -191,7 +218,7 @@ export async function updateQuestion(id: string, input: QuestionInput): Promise<
 
   await writeAuditLog({
     actorUserId: user.id,
-    actorType: 'admin',
+    actorType: user.role,
     action: AUDIT_ACTIONS.QUESTION_UPDATED,
     entityType: 'question',
     entityId: id,

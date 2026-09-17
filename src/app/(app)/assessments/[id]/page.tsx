@@ -19,7 +19,12 @@ export default async function AssessmentDetailPage({ params }: { params: Promise
         title={assessment.assessment_code as string}
         description="Full lifecycle detail for this assessment attempt."
       />
-      <AssessmentDetail assessment={assessment as never} questionSets={questionSets as never} role={user.role} />
+      <AssessmentDetail
+        assessment={assessment as never}
+        questionSets={questionSets as never}
+        role={user.role}
+        canManage={user.canManage}
+      />
     </div>
   );
 }

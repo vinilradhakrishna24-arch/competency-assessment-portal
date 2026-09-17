@@ -30,11 +30,15 @@ export function AssessmentsTable({
   initialAssessments,
   competencies,
   role,
+  canManage = false,
   initialFilters,
 }: {
   initialAssessments: AssessmentRow[];
   competencies: Competency[];
   role: RoleName;
+  /** True for a manager-tier viewer role (e.g. HSE Manager) -- can reach
+   * Create Assessment too. */
+  canManage?: boolean;
   initialFilters: { status: string; competencyId: string };
 }) {
   const router = useRouter();
@@ -91,7 +95,7 @@ export function AssessmentsTable({
           </Select>
         </div>
 
-        {role === 'admin' && (
+        {(role === 'admin' || canManage) && (
           <Button asChild>
             <Link href="/create-assessment">
               <Plus className="h-4 w-4" /> Create Assessment

@@ -30,6 +30,7 @@ export default async function AssessmentsPage({
         initialAssessments={assessments as never}
         competencies={competencies}
         role={user.role}
+        canManage={user.canManage}
         initialFilters={{ status: params.status ?? '', competencyId: params.competencyId ?? '' }}
       />
     </div>

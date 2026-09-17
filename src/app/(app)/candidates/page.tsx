@@ -9,7 +9,7 @@ export default async function CandidatesPage() {
   return (
     <div>
       <PageHeader title="Candidates" description="Manage the master list of engineers assessed through the portal." />
-      <CandidatesTable initialCandidates={candidates} role={user.role} />
+      <CandidatesTable initialCandidates={candidates} role={user.role} canManage={user.canManage} />
     </div>
   );
 }

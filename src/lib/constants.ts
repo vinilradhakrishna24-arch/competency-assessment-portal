@@ -111,6 +111,7 @@ export const AUDIT_ACTIONS = {
   CERTIFICATE_DOWNLOADED: 'certificate.downloaded',
   USER_ROLE_CHANGED: 'user.role_changed',
   USER_DELETED: 'user.deleted',
+  USER_PASSWORD_RESET: 'user.password_reset',
   SETTINGS_CHANGED: 'settings.changed',
 } as const;
 

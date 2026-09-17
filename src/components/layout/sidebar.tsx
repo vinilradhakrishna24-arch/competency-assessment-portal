@@ -10,11 +10,16 @@ import { cn } from '@/lib/utils';
 
 export function Sidebar({
   role,
+  canManage,
   streamScope,
   portalName,
   logoUrl,
 }: {
   role: RoleName;
+  /** True for a viewer-tier role with roles.can_manage set (e.g. HSE
+   * Manager) -- reveals nav items marked managerAllowed even though `role`
+   * is 'viewer'. See CurrentUser.canManage. */
+  canManage: boolean;
   /** Null = unrestricted (sees both streams). See CurrentUser.streamScope. */
   streamScope: CompetencyStream[] | null;
   portalName: string;
@@ -25,9 +30,11 @@ export function Sidebar({
   const currentStream = searchParams.get('stream');
   const [mobileOpen, setMobileOpen] = React.useState(false);
 
+  const isVisible = (item: NavItem) => item.roles.includes(role) || (canManage && item.managerAllowed);
+
   const canSeeStream = (stream: CompetencyStream) => !streamScope || streamScope.includes(stream);
   const forStream = (stream: CompetencyStream): NavItem[] =>
-    STREAM_NAV_ITEMS.filter((item) => item.roles.includes(role)).map((item) => ({
+    STREAM_NAV_ITEMS.filter(isVisible).map((item) => ({
       ...item,
       stream,
       href: `${item.href}?stream=${stream}`,
@@ -35,7 +42,7 @@ export function Sidebar({
 
   const technicalItems = canSeeStream('technical') ? forStream('technical') : [];
   const hseItems = canSeeStream('hse') ? forStream('hse') : [];
-  const sharedItems = SHARED_NAV_ITEMS.filter((item) => item.roles.includes(role));
+  const sharedItems = SHARED_NAV_ITEMS.filter(isVisible);
 
   // A stream-scoped role only ever has one section to show, so the
   // "Technical" / "HSE" headers only earn their keep when there are two.

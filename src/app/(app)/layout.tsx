@@ -13,6 +13,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <Suspense fallback={null}>
         <Sidebar
           role={user.role}
+          canManage={user.canManage}
           streamScope={user.streamScope}
           portalName={branding.portal_name}
           logoUrl={branding.logo_url}

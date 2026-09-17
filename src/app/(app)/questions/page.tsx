@@ -38,6 +38,7 @@ export default async function QuestionsPage({
         questionSets={questionSets as never}
         competencyAreas={competencyAreas as never}
         role={user.role}
+        canManage={user.canManage}
       />
     </div>
   );

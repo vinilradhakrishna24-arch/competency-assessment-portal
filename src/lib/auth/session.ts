@@ -20,6 +20,11 @@ export interface CurrentUser {
    * "HSE Manager must never see technical data" requirement is enforced
    * both here (nav) and at the RLS layer (migration 0012). */
   streamScope: CompetencyStream[] | null;
+  /** True when this profile's role has can_manage set (e.g. HSE Manager) --
+   * grants create/edit rights on assessments, questions and candidates
+   * (scoped to streamScope) without being a full Admin. See
+   * requireManagerOrAdmin() and migration 0017. */
+  canManage: boolean;
   active: boolean;
 }
 
@@ -36,13 +41,18 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id, full_name, email, active, roles(name, permission_level, stream_scope)')
+    .select('id, full_name, email, active, roles(name, permission_level, stream_scope, can_manage)')
     .eq('id', user.id)
     .maybeSingle();
 
   if (!profile || !profile.active) return null;
 
-  type RoleShape = { name: string; permission_level: RoleName; stream_scope: CompetencyStream[] | null };
+  type RoleShape = {
+    name: string;
+    permission_level: RoleName;
+    stream_scope: CompetencyStream[] | null;
+    can_manage: boolean;
+  };
   const roleRow = profile.roles as unknown as RoleShape | RoleShape[] | null;
   const roleData = Array.isArray(roleRow) ? roleRow[0] : roleRow;
   if (!roleData) return null;
@@ -54,6 +64,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     role: roleData.permission_level,
     roleName: roleData.name,
     streamScope: roleData.stream_scope,
+    canManage: roleData.can_manage,
     active: profile.active,
   };
 }
@@ -69,5 +80,17 @@ export async function requireUser(): Promise<CurrentUser> {
 export async function requireAdmin(): Promise<CurrentUser> {
   const user = await requireUser();
   if (user.role !== 'admin') redirect('/dashboard');
+  return user;
+}
+
+/** Require an Admin/Examiner OR a manager-capable viewer-tier role (e.g.
+ * HSE Manager, roles.can_manage = true) -- redirects a plain read-only
+ * Viewer to the dashboard. Callers that create/edit within a stream (e.g.
+ * createAssessment, createQuestion) must still check the caller's
+ * streamScope themselves for non-admins -- this only gates who gets past
+ * the door, not which stream they may act on. */
+export async function requireManagerOrAdmin(): Promise<CurrentUser> {
+  const user = await requireUser();
+  if (user.role !== 'admin' && !user.canManage) redirect('/dashboard');
   return user;
 }

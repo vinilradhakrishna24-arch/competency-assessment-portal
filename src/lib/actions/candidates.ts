@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireAdmin, requireUser } from '@/lib/auth/session';
+import { requireAdmin, requireManagerOrAdmin, requireUser } from '@/lib/auth/session';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { candidateSchema, type CandidateInput } from '@/lib/validation/schemas';
 import { writeAuditLog } from '@/lib/audit/log';
@@ -14,7 +14,7 @@ function toNullable(value: string | undefined): string | null {
 }
 
 export async function createCandidate(input: CandidateInput): Promise<ActionResult> {
-  const user = await requireAdmin();
+  const user = await requireManagerOrAdmin();
   const parsed = candidateSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, fieldErrors: flattenZod(parsed.error) };
@@ -46,7 +46,7 @@ export async function createCandidate(input: CandidateInput): Promise<ActionResu
 
   await writeAuditLog({
     actorUserId: user.id,
-    actorType: 'admin',
+    actorType: user.role,
     action: AUDIT_ACTIONS.CANDIDATE_CREATED,
     entityType: 'candidate',
     entityId: data.id,
@@ -58,7 +58,7 @@ export async function createCandidate(input: CandidateInput): Promise<ActionResu
 }
 
 export async function updateCandidate(id: string, input: CandidateInput): Promise<ActionResult> {
-  const user = await requireAdmin();
+  const user = await requireManagerOrAdmin();
   const parsed = candidateSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, fieldErrors: flattenZod(parsed.error) };
@@ -90,7 +90,7 @@ export async function updateCandidate(id: string, input: CandidateInput): Promis
 
   await writeAuditLog({
     actorUserId: user.id,
-    actorType: 'admin',
+    actorType: user.role,
     action: AUDIT_ACTIONS.CANDIDATE_UPDATED,
     entityType: 'candidate',
     entityId: id,

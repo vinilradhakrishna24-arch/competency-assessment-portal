@@ -24,7 +24,41 @@ export function LoginForm({ portalName, logoUrl }: { portalName: string; logoUrl
     const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
 
     if (signInError) {
+      // The user-facing message stays generic for security (never reveals
+      // whether the account exists, is unconfirmed, etc.) -- but the actual
+      // Supabase Auth reason is logged here for whoever is troubleshooting
+      // with the user (dev tools console), without ever logging the
+      // password itself.
+      console.error('[login] sign-in failed', {
+        email,
+        status: signInError.status,
+        code: signInError.code,
+        message: signInError.message,
+      });
       setError('Invalid email or password. Please try again.');
+      setLoading(false);
+      return;
+    }
+
+    // Sign-in succeeded at the auth layer, but the app also requires an
+    // active profile+role row (see getCurrentUser/requireUser) -- confirm
+    // that exists before routing in, so a profile-side problem (missing
+    // row, inactive account, deleted role) surfaces as a clear message
+    // here instead of a silent redirect loop back to /login.
+    const profileCheck = await fetch('/api/auth/profile-check');
+    if (!profileCheck.ok) {
+      const body = await profileCheck.json().catch(() => null);
+      console.error('[login] profile check failed after successful sign-in', {
+        email,
+        status: profileCheck.status,
+        reason: body?.reason,
+      });
+      await supabase.auth.signOut();
+      setError(
+        body?.reason === 'inactive'
+          ? 'Your account has been deactivated. Contact your administrator.'
+          : 'Your account is not fully set up yet. Contact your administrator.'
+      );
       setLoading(false);
       return;
     }

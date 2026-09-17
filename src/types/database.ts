@@ -37,6 +37,10 @@ export interface Role {
    * restricts a viewer-level role to only those streams (e.g. HSE
    * Manager -> ['hse']). */
   stream_scope: CompetencyStream[] | null;
+  /** Only meaningful for a viewer-tier role. When true, grants create/edit
+   * rights on questions and candidates (stream-scoped) without promoting to
+   * full Admin -- see is_manager() / migration 0017. */
+  can_manage: boolean;
   description: string | null;
   created_at: string;
 }

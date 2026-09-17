@@ -70,12 +70,19 @@ export function AssessmentDetail({
   assessment,
   questionSets,
   role,
+  canManage = false,
 }: {
   assessment: AssessmentDetailRow;
   questionSets: { id: string; set_name: string }[];
   role: RoleName;
+  /** True for a manager-tier viewer role (e.g. HSE Manager) -- can
+   * regenerate an exam link, but Cancel/Authorize Reassessment/Pending
+   * Approval review stay Admin-only. */
+  canManage?: boolean;
 }) {
-  const canEdit = role === 'admin';
+  const isAdmin = role === 'admin';
+  const canEdit = isAdmin;
+  const canRegenerate = isAdmin || canManage;
   const certificate = firstOf(assessment.certificates);
 
   const [cancelOpen, setCancelOpen] = React.useState(false);
@@ -319,37 +326,40 @@ export function AssessmentDetail({
         </div>
 
         <div className="space-y-6">
-          {canEdit && (
+          {(canEdit || canRegenerate) && (
             <Card>
               <CardHeader>
                 <CardTitle>Actions</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                {isAwaitingApproval && (
+                {isAwaitingApproval && canEdit && (
                   <Button className="w-full" asChild>
                     <Link href="/approvals">
                       <ClipboardCheck className="h-4 w-4" /> Review in Pending Approval
                     </Link>
                   </Button>
                 )}
-                {canRegenerateLink && (
+                {canRegenerateLink && canRegenerate && (
                   <Button variant="outline" className="w-full" onClick={() => setRegenOpen(true)}>
                     <Link2 className="h-4 w-4" /> Regenerate Exam Link
                   </Button>
                 )}
-                {canReassess && (
+                {canReassess && canEdit && (
                   <Button className="w-full" onClick={() => setReassessOpen(true)}>
                     <RotateCcw className="h-4 w-4" /> Authorize Reassessment
                   </Button>
                 )}
-                {isCancellable && (
+                {isCancellable && canEdit && (
                   <Button variant="destructive" className="w-full" onClick={() => setCancelOpen(true)}>
                     <Ban className="h-4 w-4" /> Cancel Assessment
                   </Button>
                 )}
-                {!isCancellable && !canReassess && !canRegenerateLink && !isAwaitingApproval && (
-                  <p className="text-sm text-slate-400">No actions available for this status.</p>
-                )}
+                {!(isAwaitingApproval && canEdit) &&
+                  !(canRegenerateLink && canRegenerate) &&
+                  !(canReassess && canEdit) &&
+                  !(isCancellable && canEdit) && (
+                    <p className="text-sm text-slate-400">No actions available for this status.</p>
+                  )}
               </CardContent>
             </Card>
           )}

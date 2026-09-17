@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { requireAdmin, requireUser } from '@/lib/auth/session';
+import { requireAdmin, requireManagerOrAdmin, requireUser } from '@/lib/auth/session';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createAssessmentSchema, type CreateAssessmentInput } from '@/lib/validation/schemas';
@@ -13,6 +13,7 @@ import { buildExamLink } from '@/lib/exam/link';
 import { writeAuditLog } from '@/lib/audit/log';
 import { AUDIT_ACTIONS } from '@/lib/constants';
 import type { ActionResult } from '@/lib/actions/types';
+import type { CompetencyStream } from '@/types/database';
 
 export interface CreateAssessmentResult extends ActionResult {
   assessmentId?: string;
@@ -21,7 +22,7 @@ export interface CreateAssessmentResult extends ActionResult {
 }
 
 export async function createAssessment(input: CreateAssessmentInput): Promise<CreateAssessmentResult> {
-  const user = await requireAdmin();
+  const user = await requireManagerOrAdmin();
   const parsed = createAssessmentSchema.safeParse(input);
   if (!parsed.success) return { ok: false, fieldErrors: flattenZod(parsed.error) };
   const data = parsed.data;
@@ -58,7 +59,7 @@ export async function createAssessment(input: CreateAssessmentInput): Promise<Cr
     candidateId = candidate.id;
     await writeAuditLog({
       actorUserId: user.id,
-      actorType: 'admin',
+      actorType: user.role,
       action: AUDIT_ACTIONS.CANDIDATE_CREATED,
       entityType: 'candidate',
       entityId: candidateId ?? undefined,
@@ -74,6 +75,12 @@ export async function createAssessment(input: CreateAssessmentInput): Promise<Cr
     .eq('id', data.competency_id)
     .single();
   if (compErr || !competency) return { ok: false, error: 'Selected competency was not found.' };
+
+  // A manager-tier role (e.g. HSE Manager) is confined to its stream_scope --
+  // full Admin has streamScope === null and skips this check entirely.
+  if (user.streamScope && !user.streamScope.includes(competency.stream as CompetencyStream)) {
+    return { ok: false, error: 'You do not have access to create assessments for this competency.' };
+  }
 
   let frozenQuestions;
   try {
@@ -122,7 +129,7 @@ export async function createAssessment(input: CreateAssessmentInput): Promise<Cr
 
   await writeAuditLog({
     actorUserId: user.id,
-    actorType: 'admin',
+    actorType: user.role,
     action: AUDIT_ACTIONS.ASSESSMENT_CREATED,
     entityType: 'assessment',
     entityId: assessment.id,
@@ -130,7 +137,7 @@ export async function createAssessment(input: CreateAssessmentInput): Promise<Cr
   });
   await writeAuditLog({
     actorUserId: user.id,
-    actorType: 'admin',
+    actorType: user.role,
     action: AUDIT_ACTIONS.ASSESSMENT_LINK_GENERATED,
     entityType: 'assessment',
     entityId: assessment.id,
@@ -190,18 +197,24 @@ export async function regenerateAssessmentLink(
   id: string,
   newLinkExpiresAt: string
 ): Promise<RegenerateLinkResult> {
-  const user = await requireAdmin();
+  const user = await requireManagerOrAdmin();
   const admin = createSupabaseAdminClient();
 
   const { data: existing, error: fetchErr } = await admin
     .from('assessments')
-    .select('status')
+    .select('status, competencies(stream)')
     .eq('id', id)
     .maybeSingle();
 
   if (fetchErr || !existing) return { ok: false, error: 'Assessment not found' };
   if (!['PENDING', 'EXPIRED'].includes(existing.status)) {
     return { ok: false, error: `Cannot regenerate a link for an assessment that is ${existing.status}.` };
+  }
+  const existingStream = (
+    Array.isArray(existing.competencies) ? existing.competencies[0] : existing.competencies
+  ) as { stream: CompetencyStream } | null;
+  if (user.streamScope && existingStream && !user.streamScope.includes(existingStream.stream)) {
+    return { ok: false, error: 'You do not have access to this assessment.' };
   }
 
   const rawToken = generateCandidateToken();
@@ -222,7 +235,7 @@ export async function regenerateAssessmentLink(
 
   await writeAuditLog({
     actorUserId: user.id,
-    actorType: 'admin',
+    actorType: user.role,
     action: AUDIT_ACTIONS.ASSESSMENT_LINK_REGENERATED,
     entityType: 'assessment',
     entityId: id,

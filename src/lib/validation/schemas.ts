@@ -165,6 +165,10 @@ export const brandingSchema = z.object({
   secondary_accent: z.string().trim().max(20),
 });
 
+export const resetPasswordSchema = z.object({
+  password: z.string().min(8, 'Password must be at least 8 characters').max(128),
+});
+
 export const inviteUserSchema = z.object({
   full_name: z.string().trim().min(1, 'Full name is required').max(200),
   email: z.string().trim().email('Enter a valid email'),

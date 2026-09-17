@@ -42,6 +42,7 @@ export function QuestionsManager({
   questionSets,
   competencyAreas = [],
   role,
+  canManage = false,
 }: {
   initialQuestions: QuestionRow[];
   competencies: { id: string; code: string; competency_name: string }[];
@@ -54,6 +55,10 @@ export function QuestionsManager({
   }[];
   competencyAreas?: { id: string; competency_id: string; code: string; area_name: string }[];
   role: RoleName;
+  /** True for a manager-tier viewer role (e.g. HSE Manager) -- can add/edit
+   * questions, but not deactivate, delete, bulk-import, or manage question
+   * sets (those stay Admin-only). */
+  canManage?: boolean;
 }) {
   const [questions, setQuestions] = React.useState(initialQuestions);
   const [competencyFilter, setCompetencyFilter] = React.useState('');
@@ -62,7 +67,8 @@ export function QuestionsManager({
   const [setsOpen, setSetsOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<EditableQuestion | null>(null);
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
-  const canEdit = role === 'admin';
+  const isAdmin = role === 'admin';
+  const canEdit = isAdmin || canManage;
 
   async function refresh() {
     const data = await getQuestions({
@@ -106,14 +112,18 @@ export function QuestionsManager({
 
         {canEdit && (
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => setSetsOpen(true)}>
-              <ListTree className="h-4 w-4" /> Question Sets
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href="/questions/import">
-                <Upload className="h-4 w-4" /> Bulk Import
-              </Link>
-            </Button>
+            {isAdmin && (
+              <>
+                <Button variant="outline" onClick={() => setSetsOpen(true)}>
+                  <ListTree className="h-4 w-4" /> Question Sets
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link href="/questions/import">
+                    <Upload className="h-4 w-4" /> Bulk Import
+                  </Link>
+                </Button>
+              </>
+            )}
             <Button
               onClick={() => {
                 setEditing(null);
@@ -201,20 +211,24 @@ export function QuestionsManager({
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={async () => {
-                          await setQuestionActive(q.id, !q.active);
-                          toast.success(q.active ? 'Question deactivated' : 'Question activated');
-                          refresh();
-                        }}
-                      >
-                        {q.active ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => setDeletingId(q.id)}>
-                        <Trash2 className="h-3.5 w-3.5 text-rose-500" />
-                      </Button>
+                      {isAdmin && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={async () => {
+                              await setQuestionActive(q.id, !q.active);
+                              toast.success(q.active ? 'Question deactivated' : 'Question activated');
+                              refresh();
+                            }}
+                          >
+                            {q.active ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => setDeletingId(q.id)}>
+                            <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </Td>
                 )}

@@ -2,13 +2,13 @@
 
 import * as React from 'react';
 import { toast } from 'sonner';
-import { Plus, UserCog, ShieldOff, ShieldCheck, Trash2 } from 'lucide-react';
+import { Plus, UserCog, ShieldOff, ShieldCheck, Trash2, KeyRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, ConfirmDialog } from '@/components/ui/dialog';
 import { FormField, Input, Select } from '@/components/ui/input';
 import { Table, Thead, Tbody, Tr, Th, Td } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { getUsers, createUser, changeUserRole, setUserActive, deleteUser } from '@/lib/actions/users';
+import { getUsers, createUser, changeUserRole, setUserActive, deleteUser, resetUserPassword } from '@/lib/actions/users';
 import type { CompetencyStream, RoleName } from '@/types/database';
 
 interface RoleOption {
@@ -49,6 +49,10 @@ export function UsersTable({
   const [form, setForm] = React.useState({ full_name: '', email: '', role_id: roles[0]?.id ?? '', password: '' });
   const [deleting, setDeleting] = React.useState<UserRow | null>(null);
   const [deleteBusy, setDeleteBusy] = React.useState(false);
+  const [resetting, setResetting] = React.useState<UserRow | null>(null);
+  const [resetPassword, setResetPassword] = React.useState('');
+  const [resetError, setResetError] = React.useState<string | null>(null);
+  const [resetBusy, setResetBusy] = React.useState(false);
 
   async function refresh() {
     const data = await getUsers();
@@ -106,6 +110,28 @@ export function UsersTable({
     toast.success('User deleted');
     setDeleting(null);
     refresh();
+  }
+
+  function openReset(user: UserRow) {
+    setResetting(user);
+    setResetPassword('');
+    setResetError(null);
+  }
+
+  async function handleResetPassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (!resetting) return;
+    setResetBusy(true);
+    setResetError(null);
+    const result = await resetUserPassword(resetting.id, resetPassword);
+    setResetBusy(false);
+    if (!result.ok) {
+      setResetError(result.error ?? result.fieldErrors?.password ?? 'Failed to reset password');
+      return;
+    }
+    toast.success(`Password reset for ${resetting.email}`);
+    setResetting(null);
+    setResetPassword('');
   }
 
   return (
@@ -176,6 +202,9 @@ export function UsersTable({
                         </>
                       )}
                     </Button>
+                    <Button variant="ghost" size="sm" onClick={() => openReset(u)}>
+                      <KeyRound className="h-3.5 w-3.5" /> Reset Password
+                    </Button>
                     <Button variant="ghost" size="sm" disabled={isSelf} onClick={() => setDeleting(u)}>
                       <Trash2 className="h-3.5 w-3.5" /> Delete
                     </Button>
@@ -213,6 +242,42 @@ export function UsersTable({
             </Button>
             <Button type="submit" disabled={saving}>
               <UserCog className="h-4 w-4" /> {saving ? 'Creating…' : 'Create User'}
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      <Dialog
+        open={!!resetting}
+        onOpenChange={(open) => !open && setResetting(null)}
+        title="Reset Password"
+        className="w-[min(28rem,92vw)]"
+      >
+        <form onSubmit={handleResetPassword} className="space-y-4">
+          <p className="text-sm text-slate-500">
+            Set a new password for <span className="font-medium text-slate-700">{resetting?.email}</span>. Share it
+            with them securely — it is shown only to you, once.
+          </p>
+          <FormField
+            label="New Password"
+            htmlFor="reset_password"
+            required
+            error={resetError ?? undefined}
+            hint="At least 8 characters."
+          >
+            <Input
+              id="reset_password"
+              type="text"
+              value={resetPassword}
+              onChange={(e) => setResetPassword(e.target.value)}
+            />
+          </FormField>
+          <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+            <Button type="button" variant="outline" onClick={() => setResetting(null)} disabled={resetBusy}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={resetBusy}>
+              <KeyRound className="h-4 w-4" /> {resetBusy ? 'Resetting…' : 'Reset Password'}
             </Button>
           </div>
         </form>
